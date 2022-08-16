@@ -4,6 +4,8 @@ import random
 import cv2
 import numpy as np
 import itertools
+from math import log2
+from math import ceil
 
 THRESHOLD = 1.5  # 2
 GREEN = (0, 255, 0)
@@ -54,40 +56,29 @@ def main():
     print("matches left 0-1: ", len(matches_left_0_1))
     print("matched kps on all 4 cameras:", len(fours_indeces))
 
-    # --------------- Apply PnP ----------------
-    fours_to_PnP = random.sample(fours_indeces, 4)
+    # --------------- Apply PnP using ransac ----------------
+    # creates kps (2d pixel locations) of the 4-matched keypoints
+    fours_kps = [[kps_left0[f[0]].pt, kps_right0[f[1]].pt, kps_left1[f[2]].pt, kps_right1[f[3]].pt]
+                 for f in fours_indeces]  # take the actual kps (not the indeces) for the four cameras
 
-    # create 3d points from pair0
-    pair0_2d = [[kps_left0[f[0]], kps_right0[f[1]]] for f in fours_to_PnP]  # take the actual kps (not the indeces) for left0 and right0
-    kps_left0_PnP, kps_right0_PnP = np.array([p[0].pt for p in pair0_2d]).T, np.array([p[1].pt for p in pair0_2d]).T
+    # creates the corresponding 3d points, in world (left0) coordinates system
+    kps_left0, kps_right0 = np.array([p[0] for p in fours_kps]).T, np.array([p[1] for p in fours_kps]).T
     k, m1, m2 = part1.read_cameras()
-    points_4d_hom = cv2.triangulatePoints(k @ m1, k @ m2, kps_left0_PnP, kps_right0_PnP)
+    points_4d_hom = cv2.triangulatePoints(k @ m1, k @ m2, kps_left0, kps_right0)
     points_3d_hom = points_4d_hom[:3, :] / points_4d_hom[3, :]  # vectors in the columns
 
-    part1.plot_3d_points(points_3d_hom)  # plot the four 3d_points
+    R_left1, t_left1 = get_Rt_with_ransac(points_3d_hom.T, fours_kps, k, m1, m2)
 
-    # get 2d points of left1
-    left1_2d = np.array([kps_left1[f[2]].pt for f in fours_to_PnP])
-    left1_2d = left1_2d.T
+    # TODO: decide, according to these, which are the inliers and outliers, and them use all the inliers to refine Rt. PnP
 
-    extrinsic_left1 = apply_P3P(points_3d_hom, left1_2d, k)  # given W in left0 coords, extrinsic_left1 @ W will be the same point in left1 coords
-    R_left1, t_left1 = None, None
-    if extrinsic_left1 is not None:
-        R_left1, t_left1 = extrinsic_left1
-    else:
-        print("camera [R|t] not found")
-        return
+    # TODO: 
+
 
     # ------------ show position of the 4 cameras -------------
     cam_positions = get_cameras_locations(m1, m2, R_left1, t_left1)
     part1.plot_3d_points(cam_positions, zlim=[-1,2], xlim=[-1,2], ylim=[-1,2])
 
     # ------------ check supporters ---------------
-    fours_kps = [[kps_left0[f[0]].pt, kps_right0[f[1]].pt, kps_left1[f[2]].pt, kps_right1[f[3]].pt]
-                for f in fours_indeces]  # take the actual kps (not the indeces) for the four cameras
-    kps_left0, kps_right0 = np.array([p[0] for p in fours_kps]).T, np.array([p[1] for p in fours_kps]).T
-    points_4d_hom = cv2.triangulatePoints(k @ m1, k @ m2, kps_left0, kps_right0)
-    points_3d_hom = points_4d_hom[:3, :] / points_4d_hom[3, :]  # vectors in the columns
 
     get_supporters(fours_kps, points_3d_hom, R_left1, t_left1, img_left0=left0, img_left1=left1)
 
@@ -136,12 +127,14 @@ def get_supporters(fours_kps, points_3d, R_left, t_left, img_left0=None, img_lef
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
-    return len(is_supporter)/len(points_3d), is_supporter
+    return sum(is_supporter)/len(points_3d.T), is_supporter
 
 
 def get_Rt_with_ransac(points_3d, kps_cameras, intrinsic, extrinsic_left0, extrinsic_right0):
     """
     get [R|t] of the camera using ransac with PnP as inner model
+    steps:
+    0. calculate amount of iterations
     repeat:
     1. select sample data
     2. create model
@@ -151,16 +144,20 @@ def get_Rt_with_ransac(points_3d, kps_cameras, intrinsic, extrinsic_left0, extri
     :param kps_cameras: the fitting 2d points of the points_3d, for each camera
     :return: [R|t] of the second pair (the first one is known
     """
+    # calculate amount of iterations
+    epsilon = 0.4  # primarily assumption, to be updated after
+    iter = get_amount_of_iterations(prob=0.975, sample_size=4, epsilon=epsilon)
     best_percentage = 0
 
-    for i_iteration in range(100):  # todo: create a good condition, using statistics
+    i_iteration = 0
+    while i_iteration < max(5, iter):  # TODO: maybe get it smaller
         # select sample data
         index_samples = sorted(random.sample(range(len(points_3d)), 4))
-        points_3d_sample = [points_3d[idx] for idx in index_samples]
-        kps_cameras_sample = [kps_cameras[idx] for idx in index_samples]
+        points_3d_sample = np.array([points_3d[idx] for idx in index_samples])
+        kps_cameras_sample = np.array([kps_cameras[idx] for idx in index_samples])
 
         # calculate [R|t] using this sample
-        extrinsic_left1 = apply_P3P(points_3d_sample, points_2d=[f[2] for f in kps_cameras_sample], intrinsic=intrinsic)
+        extrinsic_left1 = apply_P3P(points_3d_sample.T, points_2d=np.array([f[2] for f in kps_cameras_sample]).T, intrinsic=intrinsic)
 
         # estimate the results
         supporters_percentage = 0
@@ -169,16 +166,26 @@ def get_Rt_with_ransac(points_3d, kps_cameras, intrinsic, extrinsic_left0, extri
             supporters_percentage = 0
         else:
             R_left1, t_left1 = extrinsic_left1
-            supporters_percentage, supporters_boolean = get_supporters(kps_cameras, points_3d, R_left1, t_left1)
+            supporters_percentage, supporters_boolean = get_supporters(kps_cameras, points_3d.T, R_left1, t_left1)
 
         if supporters_percentage > best_percentage:
             best_percentage = supporters_percentage
             best_R, best_t = R_left1, t_left1
 
         if best_percentage == 1:
+            print("found best result after", i_iteration, "iterations")
             return best_R, best_t
 
+        # update the amount of iterations
+        i_iteration += 1
+        epsilon = min(1 - best_percentage, 0.4)
+        iter = get_amount_of_iterations(prob=0.95, sample_size=4, epsilon=epsilon)
+
     return (best_R, best_t) if best_percentage > 0 else (None, None)
+
+
+def get_amount_of_iterations(prob, sample_size, epsilon):
+    return ceil(log2(1-prob) / log2(1 - (1 - epsilon)**sample_size))
 
 
 def get_cameras_locations(m1, m2, R_left1, t_left1):
