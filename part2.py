@@ -15,16 +15,15 @@ CYAN = (255,255,0)
 ORANGE = (0, 69, 255)
 
 
-
 class Track:
     new_id = itertools.count()
 
     def __init__(self):
         self.TrackId = next(Track.new_id)
 
-        # dictionary to connect pairId in which the track appear, and the kpIndeces on both left and right cameras
-        # example - entry can be 3 : (56, 59), which means pair 3, kp #56 in left camera and kp #59 in right camera
-        self.PairId_LR_MatchedKpsIndex = {}
+        # dictionary to connect pairId in which the track appear, and the match index
+        # example - entry can be 3 : 8, which means that in pair 3, the track appears in match 8 (img_l[8] and img_r[8])
+        self.PairId_MatchIndex = {}
 
 
 class Pair:
@@ -48,9 +47,9 @@ class Pair:
         self.extrinsic_right = None
         self.relative_extrinsic_left = None
 
-        # two dictionaries to connect kp indexes to TrackId
-        self.left_MatchedKpsIndex_TrackId = {}
-        self.right_MatchedKpsIndex_TrackId = {}
+        # dictionary to connect match indexes to TrackId.
+        # (note: match index i - connects kps_l[i] and kps_r[i])
+        self.matchIndex_TrackId = {}
 
 
 def main():
@@ -99,24 +98,22 @@ def main():
             if is_supporters[i_fours]:
                 curr_four = fours_indexes[i_fours]
                 # check if the track is already exist in the prev pair
-                if curr_four[0] in prev.left_MatchedKpsIndex_TrackId:  # the track exists in previous pair
-                    trackId = prev.left_MatchedKpsIndex_TrackId[curr_four[0]]
+                if curr_four[0] in prev.matchIndex_TrackId:  # the track exists in previous pair
+                    trackId = prev.matchIndex_TrackId[curr_four[0]]  # curr_four[0] == curr_four[1], because it goes as the match number
                     track = next((t for t in arr_tracks if t.TrackId == trackId), None)  # TODO: maybe use kpsIndex <-> TrackObject dictionary?
                 else:
                     track = Track()
                     # add the prev Pair to the track
-                    track.PairId_LR_MatchedKpsIndex[prev.PairId] = (curr_four[0], curr_four[1])
+                    track.PairId_MatchIndex[prev.PairId] = curr_four[0]
                     # add the track to the prev Pair
-                    prev.left_MatchedKpsIndex_TrackId[curr_four[0]] = track.TrackId
-                    prev.right_MatchedKpsIndex_TrackId[curr_four[1]] = track.TrackId
+                    prev.matchIndex_TrackId[curr_four[0]] = track.TrackId
 
                     arr_tracks.append(track)
 
                 # add the new Pair to the track
-                track.PairId_LR_MatchedKpsIndex[curr.PairId] = (curr_four[2], curr_four[3])
+                track.PairId_MatchIndex[curr.PairId] = curr_four[2]
                 # add the track to the new Pair
-                curr.left_MatchedKpsIndex_TrackId[curr_four[2]] = track.TrackId
-                curr.right_MatchedKpsIndex_TrackId[curr_four[3]] = track.TrackId
+                curr.matchIndex_TrackId[curr_four[2]] = track.TrackId
 
         arr_pairs.append(curr)
 
