@@ -171,6 +171,23 @@ def get_matched_kps_from_matches(matches, keypoints_1, keypoints_2):
     return matched_kp1, matched_kp2
 
 
+def get_matched_kps_from_matches_with_matched_indeces(matches, keypoints_1, keypoints_2):
+    matched_indeces_kp1 = []
+    matched_indeces_kp2 = []
+    for match in matches:
+        best_match = match[0]
+        matched_indeces_kp1.append(best_match.queryIdx)
+        matched_indeces_kp2.append(best_match.trainIdx)
+
+    matched_kp1 = [keypoints_1[i] for i in matched_indeces_kp1]  # taking the actual keypoints and not only the indeces
+    matched_kp2 = [keypoints_2[i] for i in matched_indeces_kp2]
+
+    matched_indeces_kp1 = dict(zip(matched_indeces_kp1, range(len(matched_indeces_kp1))))
+    matched_indeces_kp2 = dict(zip(matched_indeces_kp2, range(len(matched_indeces_kp2))))
+
+    return matched_kp1, matched_kp2, matched_indeces_kp1, matched_indeces_kp2
+
+
 def draw_matches(base_img1, base_img2, matched_kp1, matched_kp2, my_color):
 
     garbage_output = 0
