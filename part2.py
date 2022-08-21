@@ -1,11 +1,14 @@
+import os
+from dataclasses import dataclass
+
 import part1
 import process_pair
 import random
 import cv2
 import numpy as np
 import itertools
-from math import log2
-from math import ceil
+from math import log2, ceil
+import pickle
 
 THRESHOLD = 1.5  # 2
 PAIRS = 2760
@@ -13,6 +16,15 @@ GREEN = (0, 255, 0)
 RED = (0, 0, 255)
 CYAN = (255,255,0)
 ORANGE = (0, 69, 255)
+
+
+@dataclass
+class demi_match:
+    def __init__(self, distance, imgIdx, queryIdx, trainIdx):
+        self.distance: float = distance
+        self.imgIdx: int = imgIdx
+        self.queryIdx: int = queryIdx
+        self.trainIdx: int = trainIdx
 
 
 class Track:
@@ -34,7 +46,10 @@ class Pair:
 
         kps_l, kps_r, self.matches = process_pair.get_keypoints_and_matches(img_l, img_r)
 
-        matched_kps_l, matched_kps_r, self.matched_indeces_kp1, self.matched_indeces_kp2 = part1.get_matched_kps_from_matches_with_matched_indeces([[m] for m in self.matches], kps_l, kps_r)
+        matched_kps_l, matched_kps_r, self.matched_indeces_kp_l, self.matched_indeces_kp_r = part1.get_matched_kps_from_matches_with_matched_indeces([[m] for m in self.matches], kps_l, kps_r)
+        # convert to type that can be serializable
+        self.matches = [demi_match(m.distance, m.imgIdx, m.queryIdx, m.trainIdx) for m in self.matches]
+
         # I'm interested only in kps that are matched to the other camera
         self.kps_l = np.array([kp.pt for kp in matched_kps_l])
         self.kps_r = np.array([kp.pt for kp in matched_kps_r])
@@ -51,20 +66,58 @@ class Pair:
         # (note: match index i - connects kps_l[i] and kps_r[i])
         self.matchIndex_TrackId = {}
 
+    def get_trackIds(self):
+        return list(self.matchIndex_TrackId.values())
+
+
+class Database:
+    def __init__(self, file_path=None):
+
+        if not file_path or not os.path.exists(file_path):
+            self.Tracks = {}
+            self.Pairs = {}
+        else:
+            self.Pairs, self.Tracks = self.deserialize(file_path)
+
+    def feature_location(self, PairId, TrackId):
+        pair = self.pairs[PairId]
+        track = self.tracks[TrackId]
+
+        match_index = track.PairId_MatchIndex[PairId]
+        return pair.kps_l[match_index], pair.kps_r[match_index]
+
+    def serialize(self, file_path):
+        with open(file_path, 'wb') as f:
+            pickle.dump((self.Pairs, self.Tracks), f, pickle.HIGHEST_PROTOCOL)
+
+    """
+    def serialize(self, file_path: str = 'clean_data.pkl'):
+        with open(file_path, 'wb') as f:
+            pickle.dump((self.Pairs, self.Tracks), f, pickle.HIGHEST_PROTOCOL)
+    """
+
+    def deserialize(self, file_path):
+        with open(file_path, 'rb') as f:
+            return pickle.load(f)
+
 
 def main():
+
+    database = Database('data.pkl')
+    pairs = database.Pairs
+    tracks = database.Tracks
 
     # create pair0
     pair0 = Pair(0, *part1.read_images(0))
     intrinsic, pair0.extrinsic_left, pair0.extrinsic_right = part1.read_cameras()
     pair0.relative_extrinsic_left = pair0.extrinsic_left
 
-    arr_pairs = [pair0]
-    arr_tracks = []
+    pairs[pair0.PairId] = pair0
 
     # going over the next cameras. for each 2 pairs - find common kps, find Rt + create Tracks
-    for i_pair in range(1, PAIRS+1):
-        prev = arr_pairs[i_pair - 1]
+    for i_pair in range(1, 20):  #PAIRS+1):
+        print(f"------------pair number {i_pair}------------")
+        prev = pairs[i_pair - 1]
         curr = Pair(i_pair, *part1.read_images(i_pair))
 
         # find keypoints that appear in the "four" cameras
@@ -72,7 +125,7 @@ def main():
         fours_indexes = get_4matched_kps(matches_left_prev_curr, prev.matches, curr.matches)
 
         # convert fours from indexes of all kps, to the indexes of only the kps that where matched
-        fours_indexes = [[prev.matched_indeces_kp1[f[0]], prev.matched_indeces_kp2[f[1]], curr.matched_indeces_kp1[f[2]], curr.matched_indeces_kp2[f[3]]] for f in fours_indexes]
+        fours_indexes = [[prev.matched_indeces_kp_l[f[0]], prev.matched_indeces_kp_r[f[1]], curr.matched_indeces_kp_l[f[2]], curr.matched_indeces_kp_r[f[3]]] for f in fours_indexes]
 
         # Apply PnP using ransac
         # creates kps (2d pixel locations) of the 4-matched keypoints
@@ -100,7 +153,7 @@ def main():
                 # check if the track is already exist in the prev pair
                 if curr_four[0] in prev.matchIndex_TrackId:  # the track exists in previous pair
                     trackId = prev.matchIndex_TrackId[curr_four[0]]  # curr_four[0] == curr_four[1], because it goes as the match number
-                    track = next((t for t in arr_tracks if t.TrackId == trackId), None)  # TODO: maybe use kpsIndex <-> TrackObject dictionary?
+                    track = tracks[trackId]
                 else:
                     track = Track()
                     # add the prev Pair to the track
@@ -108,14 +161,16 @@ def main():
                     # add the track to the prev Pair
                     prev.matchIndex_TrackId[curr_four[0]] = track.TrackId
 
-                    arr_tracks.append(track)
+                    tracks[track.TrackId] = track
 
                 # add the new Pair to the track
                 track.PairId_MatchIndex[curr.PairId] = curr_four[2]
                 # add the track to the new Pair
                 curr.matchIndex_TrackId[curr_four[2]] = track.TrackId
 
-        arr_pairs.append(curr)
+        pairs[curr.PairId] = curr
+
+    database.serialize(file_path='data.pkl')
 
     """
     # have pair 0 and pair 1
@@ -129,12 +184,11 @@ def main():
 
     fours_indexes = get_4matched_kps(matches_left_0_1, matches_pair0, matches_pair1)
 
-    """
     print("matches pair 0: ", len(matches_pair0))
     print("matches pair 1: ", len(matches_pair1))
     print("matches left 0-1: ", len(matches_left_0_1))
     print("matched kps on all 4 cameras:", len(fours_indexes))
-    """
+
     # --------------- Apply PnP using ransac ----------------
     # creates kps (2d pixel locations) of the 4-matched keypoints
     fours_kps = [[kps_prev_left[f[0]].pt, kps_prev_right[f[1]].pt, kps_left1[f[2]].pt, kps_right1[f[3]].pt]
@@ -214,6 +268,8 @@ def get_supporters(fours_kps, points_3d, R_left, t_left, intrinsic, extrinsic_le
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
+    print(f"best amount of supporters: {sum(is_supporter)}")
+
     return sum(is_supporter)/len(points_3d.T), is_supporter
 
 
@@ -234,7 +290,7 @@ def get_Rt_with_ransac(points_3d, kps_cameras, intrinsic, extrinsic_left0, extri
     """
     # calculate amount of iterations
     epsilon = 0.4  # primarily assumption, to be updated after
-    iter = get_amount_of_iterations(prob=0.975, sample_size=4, epsilon=epsilon)
+    iter = get_amount_of_iterations(prob=0.9999, sample_size=4, epsilon=epsilon)
     best_percentage = 0
 
     i_iteration = 0
