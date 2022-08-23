@@ -15,7 +15,7 @@ ORANGE = (0, 69, 255)
 
 def main():
     # ---------finding keyPoints with SIFT---------
-    img1,img2 = read_images(0)  # img1 = queryImage, img2 = trainImage
+    img1,img2 = read_images(13)  # img1 = queryImage, img2 = trainImage
     gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
     gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
 

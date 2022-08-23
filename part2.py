@@ -1,6 +1,6 @@
 import os
 from dataclasses import dataclass
-
+from matplotlib import pyplot as plt
 import part1
 import process_pair
 import random
@@ -16,6 +16,8 @@ GREEN = (0, 255, 0)
 RED = (0, 0, 255)
 CYAN = (255,255,0)
 ORANGE = (0, 69, 255)
+
+GROUND_TRUTH_LOCATIONS_PATH = r'D:\SLAM\exercises\VAN_ex\data\dataset05\poses\05.txt'
 
 
 @dataclass
@@ -90,12 +92,6 @@ class Database:
         with open(file_path, 'wb') as f:
             pickle.dump((self.Pairs, self.Tracks), f, pickle.HIGHEST_PROTOCOL)
 
-    """
-    def serialize(self, file_path: str = 'clean_data.pkl'):
-        with open(file_path, 'wb') as f:
-            pickle.dump((self.Pairs, self.Tracks), f, pickle.HIGHEST_PROTOCOL)
-    """
-
     def deserialize(self, file_path):
         with open(file_path, 'rb') as f:
             return pickle.load(f)
@@ -103,7 +99,15 @@ class Database:
 
 def main():
 
-    database = Database('data.pkl')
+    """
+    database = Database('data - select_better_PnP_or_P3P.pkl')
+    pairs = database.Pairs
+    tracks = database.Tracks
+
+    show_camera_coords(database)
+    """
+
+    database = Database()
     pairs = database.Pairs
     tracks = database.Tracks
 
@@ -115,13 +119,13 @@ def main():
     pairs[pair0.PairId] = pair0
 
     # going over the next cameras. for each 2 pairs - find common kps, find Rt + create Tracks
-    for i_pair in range(1, 20):  #PAIRS+1):
-        print(f"------------pair number {i_pair}------------")
+    for i_pair in range(1, PAIRS+1):
+        print(f"------------ pair number {i_pair} ------------")
         prev = pairs[i_pair - 1]
         curr = Pair(i_pair, *part1.read_images(i_pair))
 
         # find keypoints that appear in the "four" cameras
-        _, _, matches_left_prev_curr = process_pair.get_keypoints_and_matches(prev.img_l, curr.img_l)
+        _, _, matches_left_prev_curr = process_pair.get_keypoints_and_matches(prev.img_l, curr.img_l, rectified=False)
         fours_indexes = get_4matched_kps(matches_left_prev_curr, prev.matches, curr.matches)
 
         # convert fours from indexes of all kps, to the indexes of only the kps that where matched
@@ -170,17 +174,22 @@ def main():
 
         pairs[curr.PairId] = curr
 
+        if i_pair % 500 == 0:
+            database.serialize(file_path='data.pkl')
+
     database.serialize(file_path='data.pkl')
+
+    show_camera_coords(database)
 
     """
     # have pair 0 and pair 1
-    left0, right0 = part1.read_images(0)
-    left1, right1 = part1.read_images(4)
+    left0, right0 = part1.read_images(985)
+    left1, right1 = part1.read_images(986)
 
     # ------------- find 4 keypoints that appear in the "four" cameras ----------------
     kps_prev_left, kps_prev_right, matches_pair0 = process_pair.get_keypoints_and_matches(left0, right0)
     kps_left1, kps_right1, matches_pair1 = process_pair.get_keypoints_and_matches(left1, right1)
-    _, _, matches_left_0_1 = process_pair.get_keypoints_and_matches(left0, left1)
+    _, _, matches_left_0_1 = process_pair.get_keypoints_and_matches(left0, left1, rectified=False)
 
     fours_indexes = get_4matched_kps(matches_left_0_1, matches_pair0, matches_pair1)
 
@@ -210,6 +219,39 @@ def main():
 
     get_supporters(fours_kps, points_3d_hom, R_left1, t_left1, k, m1, m2, img_left0=left0, img_left1=left1)
     """
+
+
+def show_camera_coords(database=None):
+    if database:
+        locations = []
+        for i in range(len(database.Pairs)):
+            pair = database.Pairs[i]
+            locations.append(get_position_in_world(np.array([0,0,0]),  *extrinsic_to_Rt(pair.extrinsic_left)))
+
+        # I'm not interested in y_axis, because it represents the height of the camera
+        locations_0_2 = np.array([[l[0], l[2]] for l in locations])
+
+        x, y = locations_0_2.T
+
+        plt.scatter(x,y, c='red')  # s=np.array([5] * len(x)),
+
+    # find the ground truth
+    locations_ground_truth = []
+
+    with open(GROUND_TRUTH_LOCATIONS_PATH, 'r') as f:
+        for line in f:
+            extrinsic = np.array([float(n) for n in line.split(' ')])
+            extrinsic = np.reshape(extrinsic, (3,4))
+            camera_in_camera_coords = np.array([0,0,0,1])
+            locations_ground_truth.append(extrinsic @ camera_in_camera_coords)
+    locations_ground_truth_0_2 = np.array([[l[0], l[2]] for l in locations_ground_truth])
+
+    x, y = locations_ground_truth_0_2.T
+    plt.scatter(x, y, c='blue')  # s=np.array([5] * len(x)),
+
+    plt.legend((['predicted', 'ground truth'] if database else ['ground truth']))
+
+    plt.show()
 
 
 def hstack(R, t):
@@ -268,7 +310,7 @@ def get_supporters(fours_kps, points_3d, R_left, t_left, intrinsic, extrinsic_le
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
-    print(f"best amount of supporters: {sum(is_supporter)}")
+    # print(f"best amount of supporters: {sum(is_supporter)} / {len(is_supporter)}")
 
     return sum(is_supporter)/len(points_3d.T), is_supporter
 
@@ -291,7 +333,7 @@ def get_Rt_with_ransac(points_3d, kps_cameras, intrinsic, extrinsic_left0, extri
     # calculate amount of iterations
     epsilon = 0.4  # primarily assumption, to be updated after
     iter = get_amount_of_iterations(prob=0.9999, sample_size=4, epsilon=epsilon)
-    best_percentage = 0
+    best_supporters_percentage = 0
 
     i_iteration = 0
     while i_iteration < max(5, iter):  # TODO: maybe get it smaller
@@ -304,33 +346,34 @@ def get_Rt_with_ransac(points_3d, kps_cameras, intrinsic, extrinsic_left0, extri
         extrinsic_left1 = apply_P3P(points_3d_sample.T, points_2d=np.array([f[2] for f in kps_cameras_sample]).T, intrinsic=intrinsic)
 
         # estimate the results
-        supporters_percentage = 0
         if extrinsic_left1 is None:
             print("camera [R|t] not found")
+            i_iteration -= 1  # TODO: check if that's the right thing, I just not trust it as a valid sample
             supporters_percentage = 0
         else:
             R_left1, t_left1 = extrinsic_left1
             supporters_percentage, supporters_boolean = get_supporters(kps_cameras, points_3d.T, R_left1, t_left1, intrinsic, extrinsic_left0, extrinsic_right0)
 
-        if supporters_percentage > best_percentage:
-            best_percentage = supporters_percentage
+        if supporters_percentage > best_supporters_percentage:
+            best_supporters_percentage = supporters_percentage
+            best_supporters_boolean = supporters_boolean  # TODO: wasn't exist, check the meaning
             best_R, best_t = R_left1, t_left1
 
-        if best_percentage == 1:
+        if best_supporters_percentage == 1:
             print("found best result after", i_iteration, "iterations")
-            return best_R, best_t
+            break
 
         # update the amount of iterations
         i_iteration += 1
-        epsilon = min(1 - best_percentage, 0.4)
-        iter = get_amount_of_iterations(prob=0.95, sample_size=4, epsilon=epsilon)
+        epsilon = min(1 - best_supporters_percentage, 0.4)
+        iter = get_amount_of_iterations(prob=0.9999, sample_size=4, epsilon=epsilon)
 
-    if best_percentage == 0:
-        return None, None
+    if best_supporters_percentage == 0:
+        return None, None, None
 
     # refine transformation according to the inliers found in the loop
-    points_3d_pair0_inliers = np.array([points_3d[i] for i in range(len(points_3d)) if supporters_boolean[i]])
-    kps_left1_inliers = np.array([kps_cameras[i][2] for i in range(len(kps_cameras)) if supporters_boolean[i]])
+    points_3d_pair0_inliers = np.array([points_3d[i] for i in range(len(points_3d)) if best_supporters_boolean[i]])
+    kps_left1_inliers = np.array([kps_cameras[i][2] for i in range(len(kps_cameras)) if best_supporters_boolean[i]])
 
     ret, rvecs, tvecs = cv2.solvePnP(
         objectPoints=points_3d_pair0_inliers,
@@ -338,10 +381,24 @@ def get_Rt_with_ransac(points_3d, kps_cameras, intrinsic, extrinsic_left0, extri
         cameraMatrix=intrinsic,
         distCoeffs=None)
 
-    R, _ = cv2.Rodrigues(np.reshape(rvecs, (3,)))  # convert rotation vector to rotation matrix
-    t = np.reshape(tvecs, (3,))
+    R_PnP, _ = cv2.Rodrigues(np.reshape(rvecs, (3,)))  # convert rotation vector to rotation matrix
+    t_PnP = np.reshape(tvecs, (3,))
 
-    _, supporters_boolean = get_supporters(kps_cameras, points_3d.T, R, t, intrinsic, extrinsic_left0, extrinsic_right0)
+    refined_supporters_percentage, refined_supporters_boolean = get_supporters(kps_cameras, points_3d.T, R_PnP, t_PnP, intrinsic, extrinsic_left0, extrinsic_right0)
+
+    if refined_supporters_percentage < best_supporters_percentage:
+        print(f"refined is worse than the best P3P. refined - {sum(refined_supporters_boolean)}, best P3P - {sum(best_supporters_boolean)}")
+        R, t = best_R, best_t
+        supporters_boolean = best_supporters_boolean
+    else:
+        R, t = R_PnP, t_PnP
+        supporters_boolean = refined_supporters_boolean
+    """
+    # always take the PnP
+    R, t = R_PnP, t_PnP
+    supporters_boolean = refined_supporters_boolean
+    """
+    print(f"best amount of supporters: {sum(supporters_boolean)} / {len(supporters_boolean)}")
 
     return R, t, supporters_boolean
 
@@ -368,7 +425,7 @@ def get_position_in_world(point, R, t):
     :param point: the point to change coords to. starts in camera coords
     :param R: rotation from world to camera
     :param t: translation from world to camera
-            p_camera = R * p_world + t
+            i.e. p_camera = R * p_world + t
     :return: the point in world coordinates
     """
     t = np.reshape(t, (3,))
@@ -422,7 +479,7 @@ def apply_P3P(points_3d, points_2d, intrinsic):
         estimated_2d_hom = intrinsic @ (R @ validation_vec + t)
         estimated_2d = estimated_2d_hom[:2] / estimated_2d_hom[2]
         if np.linalg.norm(validation_2d - estimated_2d) < 1:  # if 2d == k*[R|t]*vec (almost equal is good enough)
-            print("found the extrinsic matrix of the camera!\n the possible values: ", retval)
+            # print("found the extrinsic matrix of the camera!\n the possible values: ", retval)
             return R, t
 
     return None
