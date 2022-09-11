@@ -4,8 +4,8 @@
     <list default="true" id="64c62eb0-8f11-41f6-a33e-e706784786e0" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/data.pkl" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/part1.py" beforeDir="false" afterPath="$PROJECT_DIR$/part1.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/part2.py" beforeDir="false" afterPath="$PROJECT_DIR$/part2.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/process_pair.py" beforeDir="false" afterPath="$PROJECT_DIR$/process_pair.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -42,8 +42,8 @@
       </list>
     </option>
   </component>
-  <component name="RunManager" selected="Python.part2">
-    <configuration name="artifacts_remover" type="PythonConfigurationType" factoryName="Python" temporary="true">
+  <component name="RunManager" selected="Python.part1">
+    <configuration name="get_data" type="PythonConfigurationType" factoryName="Python" temporary="true">
       <module name="code" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
@@ -55,7 +55,7 @@
       <option name="IS_MODULE_SDK" value="true" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/artifacts_remover.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/get_data.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -150,11 +150,11 @@
     </configuration>
     <recent_temporary>
       <list>
-        <item itemvalue="Python.part2" />
-        <item itemvalue="Python.prat2_read_database" />
         <item itemvalue="Python.part1" />
+        <item itemvalue="Python.part2" />
+        <item itemvalue="Python.get_data" />
+        <item itemvalue="Python.prat2_read_database" />
         <item itemvalue="Python.process_2_images" />
-        <item itemvalue="Python.artifacts_remover" />
       </list>
     </recent_temporary>
   </component>
@@ -197,10 +197,27 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/part2.py</url>
-          <line>114</line>
+          <line>133</line>
           <option name="timeStamp" value="59" />
         </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/part2.py</url>
+          <line>128</line>
+          <option name="timeStamp" value="67" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/get_data.py</url>
+          <line>4</line>
+          <option name="timeStamp" value="68" />
+        </line-breakpoint>
       </breakpoints>
+      <default-breakpoints>
+        <breakpoint type="python-exception">
+          <properties notifyOnTerminate="true" exception="BaseException">
+            <option name="notifyOnTerminate" value="true" />
+          </properties>
+        </breakpoint>
+      </default-breakpoints>
     </breakpoint-manager>
     <watches-manager>
       <configuration name="PythonConfigurationType">

@@ -31,6 +31,7 @@ def get_keypoints_and_matches(img1, img2, rectified=True):
 
     # --------- filter matches if height differs in more than 2 pixels ---------
     if rectified:
+        # img1 = queryImage, img2 = trainImage
         matches = list(
             filter(lambda m: abs(keypoints_1[m.queryIdx].pt[1] - keypoints_2[m.trainIdx].pt[1]) <= 2, matches))
 
@@ -39,34 +40,14 @@ def get_keypoints_and_matches(img1, img2, rectified=True):
 
 def proc(img1, img2, rectified=True):
 
-    # --------- keypoints ---------
-    sift = cv2.SIFT_create()
-    keypoints_1, descriptors_1 = sift.detectAndCompute(img1, None)
-    keypoints_2, descriptors_2 = sift.detectAndCompute(img2, None)
-
-    # --------- BFMatcher with default params ---------
-    bf = cv2.BFMatcher()
-    double_matches = bf.knnMatch(descriptors_1, descriptors_2, k=2)
-
-    # Apply ratio test
-    matches = []
-    for m, n in double_matches:
-        if m.distance < DISTANCE_THREASHOLD and m.distance < FILTER_RATIO * n.distance:
-            matches.append([m])  # append m as a list, so that we get list of lists as required in drawMatchesKnn
-
-    # --------- filter matches if height differs in more than 2 pixels ---------
-    if rectified:
-        # img1 = queryImage, img2 = trainImage
-        matches = list(
-            filter(lambda m: abs(keypoints_1[m[0].queryIdx].pt[1] - keypoints_2[m[0].trainIdx].pt[1]) <= 2, matches))
-
+    keypoints_1, keypoints_2, matches = get_keypoints_and_matches(img1, img2, rectified)
 
     # --------- triangulation ---------
     matched_kp1, matched_kp2 = part1.get_matched_kps_from_matches(matches, keypoints_1, keypoints_2)
 
     k, m1, m2 = part1.read_cameras()
 
-    # matters of reshaping, hopefully
+    # get the 2d_locations of kps, in numpy array
     np_kp1 = np.array([kp.pt for kp in matched_kp1])
     np_kp2 = np.array([kp.pt for kp in matched_kp2])
 

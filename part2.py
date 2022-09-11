@@ -79,11 +79,11 @@ class Database:
             self.Tracks = {}
             self.Pairs = {}
         else:
-            self.Pairs, self.Tracks = self.deserialize(file_path)
+            self.deserialize(file_path)
 
     def feature_location(self, PairId, TrackId):
-        pair = self.pairs[PairId]
-        track = self.tracks[TrackId]
+        pair = self.Pairs[PairId]
+        track = self.Tracks[TrackId]
 
         match_index = track.PairId_MatchIndex[PairId]
         return pair.kps_l[match_index], pair.kps_r[match_index]
@@ -94,7 +94,25 @@ class Database:
 
     def deserialize(self, file_path):
         with open(file_path, 'rb') as f:
-            return pickle.load(f)
+            self.Pairs, self.Tracks = pickle.load(f)
+
+
+def get_longest_track(tracks):
+    # find longest track
+    long_track = max(tracks.values(), key=lambda t: len(t.PairId_MatchIndex))
+    len_long = len(long_track.PairId_MatchIndex.keys())
+    return long_track
+
+
+def show_track_in_images(track, database):
+    print(f"track id: {track.TrackId}")
+    print(f"length: {len(track.PairId_MatchIndex)}")
+    for pair_id in track.PairId_MatchIndex:
+        kp_l, kp_r = database.feature_location(pair_id, track.TrackId)
+        img_l, img_r = part1.read_images(pair_id)
+        kped_img = cv2.circle(img_l, (int(kp_l[0]), int(kp_l[1])), 4, color=CYAN, thickness=-1)
+        cv2.imshow(f"follow track", kped_img)
+        cv2.waitKey(500)
 
 
 def main():
@@ -104,7 +122,8 @@ def main():
     pairs = database.Pairs
     tracks = database.Tracks
 
-    show_camera_coords(database)
+    #show_camera_coords(database)
+    show_track_in_images(get_longest_track(tracks), database)
     """
 
     database = Database()
