@@ -1,4 +1,5 @@
 import os
+import time
 from dataclasses import dataclass
 from matplotlib import pyplot as plt
 import part1
@@ -99,7 +100,8 @@ class Database:
 
 def get_longest_track(tracks):
     # find longest track
-    long_track = max(tracks.values(), key=lambda t: len(t.PairId_MatchIndex))
+    not_standing = list(filter(lambda t: list(t.PairId_MatchIndex.keys())[0] > 2400 or list(t.PairId_MatchIndex.keys())[-1] < 2300, list(tracks.values())))
+    long_track = max(not_standing, key=lambda t: len(t.PairId_MatchIndex))
     len_long = len(long_track.PairId_MatchIndex.keys())
     return long_track
 
@@ -107,25 +109,26 @@ def get_longest_track(tracks):
 def show_track_in_images(track, database):
     print(f"track id: {track.TrackId}")
     print(f"length: {len(track.PairId_MatchIndex)}")
+    print(f"from {list(track.PairId_MatchIndex.keys())[0]} to {list(track.PairId_MatchIndex.keys())[-1]}")
     for pair_id in track.PairId_MatchIndex:
         kp_l, kp_r = database.feature_location(pair_id, track.TrackId)
         img_l, img_r = part1.read_images(pair_id)
         kped_img = cv2.circle(img_l, (int(kp_l[0]), int(kp_l[1])), 4, color=CYAN, thickness=-1)
         cv2.imshow(f"follow track", kped_img)
-        cv2.waitKey(500)
+        cv2.waitKey(250)
 
 
 def main():
 
-    """
-    database = Database('data - select_better_PnP_or_P3P.pkl')
+
+    database = Database('data - only_1_iteration_of_PnP.pkl')  # data - 10 pairs
     pairs = database.Pairs
     tracks = database.Tracks
 
-    #show_camera_coords(database)
-    show_track_in_images(get_longest_track(tracks), database)
+    show_camera_coords(database)
+    #show_track_in_images(get_longest_track(tracks), database)
     """
-
+    """
     database = Database()
     pairs = database.Pairs
     tracks = database.Tracks
@@ -137,6 +140,7 @@ def main():
 
     pairs[pair0.PairId] = pair0
 
+    start_time = time.time()
     # going over the next cameras. for each 2 pairs - find common kps, find Rt + create Tracks
     for i_pair in range(1, PAIRS+1):
         print(f"------------ pair number {i_pair} ------------")
@@ -195,6 +199,11 @@ def main():
 
         if i_pair % 500 == 0:
             database.serialize(file_path='data.pkl')
+        #if i_pair % 300 == 0:
+        #    show_camera_coords(database)
+
+    end_time = time.time()
+    print(f"the algorithm took {round(end_time-start_time, 3)} seconds")
 
     database.serialize(file_path='data.pkl')
 
@@ -252,7 +261,7 @@ def show_camera_coords(database=None):
 
         x, y = locations_0_2.T
 
-        plt.scatter(x,y, c='red')  # s=np.array([5] * len(x)),
+        plt.scatter(x,y, c='red',s=np.array([5] * len(x)))  #
 
     # find the ground truth
     locations_ground_truth = []
@@ -266,11 +275,28 @@ def show_camera_coords(database=None):
     locations_ground_truth_0_2 = np.array([[l[0], l[2]] for l in locations_ground_truth])
 
     x, y = locations_ground_truth_0_2.T
-    plt.scatter(x, y, c='blue')  # s=np.array([5] * len(x)),
+    plt.scatter(x, y, c='blue', s=np.array([5] * len(x)))  #
 
     plt.legend((['predicted', 'ground truth'] if database else ['ground truth']))
 
     plt.show()
+
+    # calc numeric distance
+    dis_list = list(map(get_distance, zip(locations_0_2, locations_ground_truth_0_2)))
+    sum_dis = sum(dis_list)
+    print(f"the sum of distance is {sum_dis}")
+
+
+def get_distance(pair):
+    """
+    gives the euclidean distance between two coordinates
+    :param pair: pair of 2 positions
+    :return: euclidean distance
+    """
+    found_location = pair[0]
+    expected_location = pair[1]
+
+    return sum(map(lambda v: (v[0] - v[1])**2, zip(found_location, expected_location)))
 
 
 def hstack(R, t):
@@ -344,7 +370,11 @@ def get_Rt_with_ransac(points_3d, kps_cameras, intrinsic, extrinsic_left0, extri
         2. create model
         3. check how the model fits to the data
         4. save best result
-    5. refine transformation according to the inliers found in the loop
+    refine transformation according to the inliers found in the loop:
+    repeat:
+        5. create model from all inliers
+        6. find new inliers and check how the model fits
+
     :param points_3d: points in 3d, represented in world coordinate system
     :param kps_cameras: the fitting 2d points of the points_3d, for each camera
     :return: [R|t] of the second pair (the first one is known)
@@ -352,7 +382,7 @@ def get_Rt_with_ransac(points_3d, kps_cameras, intrinsic, extrinsic_left0, extri
     # calculate amount of iterations
     epsilon = 0.4  # primarily assumption, to be updated after
     iter = get_amount_of_iterations(prob=0.9999, sample_size=4, epsilon=epsilon)
-    best_supporters_percentage = 0
+    best_P3P_supporters_percentage = 0
 
     i_iteration = 0
     while i_iteration < max(5, iter):  # TODO: maybe get it smaller
@@ -373,50 +403,74 @@ def get_Rt_with_ransac(points_3d, kps_cameras, intrinsic, extrinsic_left0, extri
             R_left1, t_left1 = extrinsic_left1
             supporters_percentage, supporters_boolean = get_supporters(kps_cameras, points_3d.T, R_left1, t_left1, intrinsic, extrinsic_left0, extrinsic_right0)
 
-        if supporters_percentage > best_supporters_percentage:
-            best_supporters_percentage = supporters_percentage
-            best_supporters_boolean = supporters_boolean  # TODO: wasn't exist, check the meaning
-            best_R, best_t = R_left1, t_left1
+        if supporters_percentage > best_P3P_supporters_percentage:
+            best_P3P_supporters_percentage = supporters_percentage
+            best_P3P_supporters_boolean = supporters_boolean
+            best_P3P_R, best_P3P_t = R_left1, t_left1
 
-        if best_supporters_percentage == 1:
+        if best_P3P_supporters_percentage == 1:
             print("found best result after", i_iteration, "iterations")
             break
 
         # update the amount of iterations
         i_iteration += 1
-        epsilon = min(1 - best_supporters_percentage, 0.4)
+        epsilon = min(1 - best_P3P_supporters_percentage, 0.4)
         iter = get_amount_of_iterations(prob=0.9999, sample_size=4, epsilon=epsilon)
 
-    if best_supporters_percentage == 0:
+    if best_P3P_supporters_percentage == 0:
         return None, None, None
 
     # refine transformation according to the inliers found in the loop
-    points_3d_pair0_inliers = np.array([points_3d[i] for i in range(len(points_3d)) if best_supporters_boolean[i]])
-    kps_left1_inliers = np.array([kps_cameras[i][2] for i in range(len(kps_cameras)) if best_supporters_boolean[i]])
+    # repeat:
+    #   calc model [R|t] with all inliers
+    #   calc new inliers (until convergence/max 5 times)
+    PnP_supporters_percentage, PnP_supporters_boolean = best_P3P_supporters_percentage, best_P3P_supporters_boolean
 
-    ret, rvecs, tvecs = cv2.solvePnP(
-        objectPoints=points_3d_pair0_inliers,
-        imagePoints=kps_left1_inliers,
-        cameraMatrix=intrinsic,
-        distCoeffs=None)
+    another_iteration = True
+    i_iteration = 0
+    last_percentage = PnP_supporters_percentage
+    best_PnP_supporters_percentage = 0
+    while another_iteration:
+        # find inliers
+        points_3d_pair0_inliers = np.array([points_3d[i] for i in range(len(points_3d)) if PnP_supporters_boolean[i]])
+        kps_left1_inliers = np.array([kps_cameras[i][2] for i in range(len(kps_cameras)) if PnP_supporters_boolean[i]])
 
-    R_PnP, _ = cv2.Rodrigues(np.reshape(rvecs, (3,)))  # convert rotation vector to rotation matrix
-    t_PnP = np.reshape(tvecs, (3,))
+        # create model using all inliers
+        ret, rvecs, tvecs = cv2.solvePnP(
+            objectPoints=points_3d_pair0_inliers,
+            imagePoints=kps_left1_inliers,
+            cameraMatrix=intrinsic,
+            distCoeffs=None)
 
-    refined_supporters_percentage, refined_supporters_boolean = get_supporters(kps_cameras, points_3d.T, R_PnP, t_PnP, intrinsic, extrinsic_left0, extrinsic_right0)
+        R_PnP, _ = cv2.Rodrigues(np.reshape(rvecs, (3,)))  # convert rotation vector to rotation matrix
+        t_PnP = np.reshape(tvecs, (3,))
 
-    if refined_supporters_percentage < best_supporters_percentage:
-        print(f"refined is worse than the best P3P. refined - {sum(refined_supporters_boolean)}, best P3P - {sum(best_supporters_boolean)}")
-        R, t = best_R, best_t
-        supporters_boolean = best_supporters_boolean
-    else:
-        R, t = R_PnP, t_PnP
-        supporters_boolean = refined_supporters_boolean
+        # estimate new model
+        PnP_supporters_percentage, PnP_supporters_boolean = get_supporters(kps_cameras, points_3d.T, R_PnP, t_PnP, intrinsic, extrinsic_left0, extrinsic_right0)
+        # save best result
+        if PnP_supporters_percentage > best_PnP_supporters_percentage:
+            best_PnP_supporters_percentage = PnP_supporters_percentage
+            best_PnP_supporters_boolean = PnP_supporters_boolean
+            best_PnP_R, best_PnP_t = R_PnP, t_PnP
+
+        i_iteration += 1
+        another_iteration = PnP_supporters_percentage < 1 and last_percentage != PnP_supporters_percentage and i_iteration < 5
+        last_percentage = PnP_supporters_percentage
+        another_iteration = False
+
+    if best_PnP_supporters_percentage < best_P3P_supporters_percentage:
+        print(f"refined is worse than the best P3P. refined - {sum(best_PnP_supporters_boolean)}, best P3P - {sum(best_P3P_supporters_boolean)}")
+        R, t = best_P3P_R, best_P3P_t
+        supporters_boolean = best_P3P_supporters_boolean
+    else:  # PnP is better or equal
+        R, t = best_PnP_R, best_PnP_t
+        supporters_boolean = best_PnP_supporters_boolean
     """
     # always take the PnP
-    R, t = R_PnP, t_PnP
-    supporters_boolean = refined_supporters_boolean
+    R, t = best_PnP_R, best_PnP_t
+    supporters_boolean = best_PnP_supporters_boolean
     """
+
     print(f"best amount of supporters: {sum(supporters_boolean)} / {len(supporters_boolean)}")
 
     return R, t, supporters_boolean
@@ -444,7 +498,7 @@ def get_position_in_world(point, R, t):
     :param point: the point to change coords to. starts in camera coords
     :param R: rotation from world to camera
     :param t: translation from world to camera
-            i.e. p_camera = R * p_world + t
+            i.e. p_camera = R * p_world + t  -->  p_world = R.T * (p_camera - t)
     :return: the point in world coordinates
     """
     t = np.reshape(t, (3,))

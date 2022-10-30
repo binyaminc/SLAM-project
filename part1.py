@@ -6,7 +6,7 @@ from mpl_toolkits.mplot3d import Axes3D
 DATA_PATH = r'D:\SLAM\exercises\VAN_ex\data\dataset05\sequences\05\\'
 
 FILTER_RATIO = 0.75
-NUM_MATCHES_SHOW = 200
+NUM_MATCHES_SHOW = 20
 DISTANCE_THREASHOLD = 400  # previously - 100
 
 CYAN = (255,255,0)
@@ -15,7 +15,7 @@ ORANGE = (0, 69, 255)
 
 def main():
     # ---------finding keyPoints with SIFT---------
-    img1,img2 = read_images(13)  # img1 = queryImage, img2 = trainImage
+    img1,img2 = read_images(0)  # img1 = queryImage, img2 = trainImage
     gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
     gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
 
@@ -242,15 +242,20 @@ def read_cameras():
 
 def show_hist_from_matches(matches, keypoints_1, keypoints_2):
     dis = []
+    sum_good = 0
     for match in matches:
         match = match[0]
         idx1 = match.queryIdx
         idx2 = match.trainIdx
-        dis.append(abs(keypoints_1[idx1].pt[1] - keypoints_2[idx2].pt[1]))  # takes pt[1] because I compare with respect to Y axis
+        temp_dis = abs(keypoints_1[idx1].pt[1] - keypoints_2[idx2].pt[1])
+        dis.append(temp_dis)  # takes pt[1] because I compare with respect to Y axis
+        if temp_dis <= 2:
+            sum_good += 1
 
     #dis = [i for i in dis if i<50]
     plt.hist(dis, bins=100)
     plt.show()
+    print(f"good percentage is {round(100*sum_good/len(matches), 2)} %")
 
     cv2.waitKey(0)
 
