@@ -2,13 +2,9 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="64c62eb0-8f11-41f6-a33e-e706784786e0" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/part3.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/data - 10 pairs.pkl" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/data.pkl" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/get_data.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/part1.py" beforeDir="false" afterPath="$PROJECT_DIR$/part1.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/part2.py" beforeDir="false" afterPath="$PROJECT_DIR$/part2.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -45,7 +41,7 @@
       </list>
     </option>
   </component>
-  <component name="RunManager" selected="Python.get_data">
+  <component name="RunManager" selected="Python.part1">
     <configuration name="create_video_from_images" type="PythonConfigurationType" factoryName="Python" temporary="true">
       <module name="code" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -153,8 +149,8 @@
     </configuration>
     <recent_temporary>
       <list>
-        <item itemvalue="Python.get_data" />
         <item itemvalue="Python.part1" />
+        <item itemvalue="Python.get_data" />
         <item itemvalue="Python.create_video_from_images" />
         <item itemvalue="Python.part2" />
         <item itemvalue="Python.prat2_read_database" />
@@ -211,11 +207,6 @@
           <option name="timeStamp" value="67" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/part3.py</url>
-          <line>10</line>
-          <option name="timeStamp" value="68" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/part2.py</url>
           <line>284</line>
           <option name="timeStamp" value="70" />
@@ -224,6 +215,11 @@
           <url>file://$PROJECT_DIR$/part1.py</url>
           <line>50</line>
           <option name="timeStamp" value="72" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/part1.py</url>
+          <line>18</line>
+          <option name="timeStamp" value="73" />
         </line-breakpoint>
       </breakpoints>
       <default-breakpoints>
