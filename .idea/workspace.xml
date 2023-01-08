@@ -3,8 +3,8 @@
   <component name="ChangeListManager">
     <list default="true" id="64c62eb0-8f11-41f6-a33e-e706784786e0" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/data - 10 pairs.pkl" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data.pkl" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/part2.py" beforeDir="false" afterPath="$PROJECT_DIR$/part2.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/part3.py" beforeDir="false" afterPath="$PROJECT_DIR$/part3.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -41,7 +41,7 @@
       </list>
     </option>
   </component>
-  <component name="RunManager" selected="Python.part1">
+  <component name="RunManager" selected="Python.part3">
     <configuration name="create_video_from_images" type="PythonConfigurationType" factoryName="Python" temporary="true">
       <module name="code" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -126,7 +126,7 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
-    <configuration name="prat2_read_database" type="PythonConfigurationType" factoryName="Python" temporary="true">
+    <configuration name="part3" type="PythonConfigurationType" factoryName="Python" temporary="true">
       <module name="code" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
@@ -138,7 +138,7 @@
       <option name="IS_MODULE_SDK" value="true" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="SCRIPT_NAME" value="D:\SLAM\exercises\VAN_ex\code\create_video_from_images.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/part3.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -149,11 +149,11 @@
     </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Python.part3" />
+        <item itemvalue="Python.part2" />
         <item itemvalue="Python.part1" />
         <item itemvalue="Python.get_data" />
         <item itemvalue="Python.create_video_from_images" />
-        <item itemvalue="Python.part2" />
-        <item itemvalue="Python.prat2_read_database" />
       </list>
     </recent_temporary>
   </component>
@@ -195,21 +195,6 @@
           <url>file://$PROJECT_DIR$/part1.py</url>
           <line>193</line>
           <option name="timeStamp" value="19" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/part2.py</url>
-          <line>136</line>
-          <option name="timeStamp" value="59" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/part2.py</url>
-          <line>131</line>
-          <option name="timeStamp" value="67" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/part2.py</url>
-          <line>284</line>
-          <option name="timeStamp" value="70" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/part1.py</url>
