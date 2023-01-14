@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 
-DATA_PATH = r'../data/dataset05/sequences/05//'
+DATA_PATH = r'../data/dataset/sequences/01//'
 
 FILTER_RATIO = 0.75
 NUM_MATCHES_SHOW = 200
@@ -13,15 +13,15 @@ HEIGHT_THRESH = 2
 
 def get_keypoints_and_matches(img1, img2, rectified=True):
     # find keypoints
-    keypoints_1, descriptors_1, keypoints_2, descriptors_2 = get_keypoints(img1, img2)
+    keypoints_1, descriptors_1, keypoints_2, descriptors_2 = get_keypoints(img1, img2) 
 
     # apply BFMatcher with default params
     matches = get_matches(descriptors_1, descriptors_2)
-
+    
     # filter matches by height (takes only matches that differ in less than 2 pixels)
     if rectified:
         matches = filter_matches_with_height(matches, keypoints_1, keypoints_2)
-
+        
     return keypoints_1, keypoints_2, matches
 
 
@@ -48,12 +48,12 @@ def get_matches(descriptors_1, descriptors_2):
 
 def filter_matches_with_height(matches, keypoints_1, keypoints_2):
     """
-    filter the matches according to the geight of the matched keypoints.
+    filter the matches according to the geight of the matched keypoints. 
     Note: img1 = queryImage, img2 = trainImage
     """
     filtered_matches = list(
         filter(lambda m: abs(keypoints_1[m.queryIdx].pt[1] - keypoints_2[m.trainIdx].pt[1]) <= HEIGHT_THRESH, matches))
-
+    
     return filtered_matches
 
 

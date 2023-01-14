@@ -14,14 +14,16 @@ import pickle
 from tqdm import tqdm
 
 THRESHOLD = 1.5  # 2
-PAIRS = 2760
+PAIRS = 1100  # 2760
 
 GREEN = (0, 255, 0)
 RED = (0, 0, 255)
-CYAN = (255, 255, 0)
+CYAN = (255,255,0)
 ORANGE = (0, 69, 255)
 
-GROUND_TRUTH_LOCATIONS_PATH = r'../data/dataset05/poses/05.txt'
+
+GROUND_TRUTH_LOCATIONS_PATH = r'../data/dataset/poses/01.txt'
+SAVE_PATH = r'results/data 01.pkl'
 
 
 @dataclass
@@ -50,8 +52,7 @@ class Pair:
 
         detected_kps_l, detected_kps_r, self.matches = process_pair.get_keypoints_and_matches(self.img_l, self.img_r)
 
-        matched_kps_l, matched_kps_r, self.matched_indeces_kp_l, self.matched_indeces_kp_r = part1.get_matched_kps(
-            self.matches, detected_kps_l, detected_kps_r)
+        matched_kps_l, matched_kps_r, self.matched_indeces_kp_l, self.matched_indeces_kp_r = part1.get_matched_kps(self.matches, detected_kps_l, detected_kps_r)
         # convert to type that can be serializable
         self.matches = [demi_match(m.distance, m.imgIdx, m.queryIdx, m.trainIdx) for m in self.matches]
 
@@ -122,10 +123,10 @@ def main():
     intrinsic, pair0.extrinsic_left, _ = part1.read_cameras()
 
     pairs.append(pair0)
-
+    
     # going over the next cameras. for each 2 pairs - find common kps, find Rt + create Tracks
-    for i_pair in tqdm(range(1, PAIRS + 1)):
-        # print(f"------------ pair number {i_pair} ------------")
+    for i_pair in tqdm(range(1, PAIRS+1)):
+        #print(f"------------ pair number {i_pair} ------------")
         prev = pairs[i_pair - 1]
         curr = Pair(i_pair)
 
@@ -134,34 +135,30 @@ def main():
         fours_indexes = get_4matched_kps(matches_left_prev_curr, prev.matches, curr.matches)
 
         # convert fours from indexes of all kps, to the indexes of only the kps that where matched
-        fours_indexes = [
-            [prev.matched_indeces_kp_l[f[0]], prev.matched_indeces_kp_r[f[1]], curr.matched_indeces_kp_l[f[2]],
-             curr.matched_indeces_kp_r[f[3]]] for f in fours_indexes]
+        fours_indexes = [[prev.matched_indeces_kp_l[f[0]], prev.matched_indeces_kp_r[f[1]], curr.matched_indeces_kp_l[f[2]], curr.matched_indeces_kp_r[f[3]]] for f in fours_indexes]
 
         # Apply PnP using ransac
         # creates kps (2d pixel locations) of the 4-matched keypoints
         fours_kps = [[prev.kps_l[f[0]], prev.kps_r[f[1]], curr.kps_l[f[2]], curr.kps_r[f[3]]]
                      for f in fours_indexes]  # take the actual kps (not the indexes) for the four cameras
 
-        # creates the corresponding 3d points, in world (left0) coordinates system
+        # creates the corresponding 3d points, in world (left0) coordinates system 
         kps_prev_left, kps_prev_right = np.array([p[0] for p in fours_kps]), np.array([p[1] for p in fours_kps])
         prev_extrinsic_right = hstack(*get_Rt_right(*get_Rt(prev.extrinsic_left)))
-        points_3d_world = process_pair.get_cloud(kps_prev_left, kps_prev_right,
-                                                 intrinsic, prev.extrinsic_left, prev_extrinsic_right)
+        points_3d_world = process_pair.get_cloud(kps_prev_left, kps_prev_right, 
+                                                intrinsic, prev.extrinsic_left, prev_extrinsic_right)
 
         # find Rt for the curr pair
-        R_curr_left, t_curr_left, is_supporters = get_Rt_with_ransac(points_3d_world.T, fours_kps, intrinsic,
-                                                                     prev.extrinsic_left, prev_extrinsic_right)
+        R_curr_left, t_curr_left, is_supporters = get_Rt_with_ransac(points_3d_world.T, fours_kps, intrinsic, prev.extrinsic_left, prev_extrinsic_right)
         curr.extrinsic_left = hstack(R_curr_left, t_curr_left)
-
+        
         # find/create the tracks in the pairs
         for i_fours in range(len(fours_indexes)):
             if is_supporters[i_fours]:
                 curr_four = fours_indexes[i_fours]
                 # check if the track already exists in the previous pair
                 if curr_four[0] in prev.matchIndex_TrackId:  # the track exists in previous pair
-                    trackId = prev.matchIndex_TrackId[
-                        curr_four[0]]  # curr_four[0] == curr_four[1], because it goes as the match number
+                    trackId = prev.matchIndex_TrackId[curr_four[0]]  # curr_four[0] == curr_four[1], because it goes as the match number
                     track = tracks[trackId]
                 else:
                     track = Track()
@@ -179,14 +176,14 @@ def main():
 
         pairs.append(curr)
 
-        if i_pair % 500 == 0:
-            database.serialize(file_path='data.pkl')
-        # if i_pair % 300 == 0:
+        #if i_pair % 500 == 0:
+        #    database.serialize(file_path='data.pkl')
+        #if i_pair % 300 == 0:
         #    show_camera_coords(database)
 
-    database.serialize(file_path=r'results/data 30.pkl')
+    database.serialize(file_path=SAVE_PATH)
     show_camera_coords(database.Pairs)
-
+    
 
 def show_camera_coords(pairs=None, full_groundtruth=False):
     # plot the pairs
@@ -197,7 +194,7 @@ def show_camera_coords(pairs=None, full_groundtruth=False):
         if any((x > 300) | (x < -300) | (y > 450) | (y < -100)):
             values_in_good_range = False
 
-        plt.scatter(x, y, c='red', s=np.array([5] * len(x)))  #
+        plt.scatter(x,y, c='red',s=np.array([5] * len(x)))  #
 
     # plot ground truth
     if full_groundtruth:
@@ -226,7 +223,7 @@ def get_pairs_locations(pairs):
     locations = []
     for i in range(len(pairs)):
         pair = pairs[i]
-        locations.append(get_position_in_world(np.array([0, 0, 0]), *get_Rt(pair.extrinsic_left)))
+        locations.append(get_position_in_world(np.array([0,0,0]), *get_Rt(pair.extrinsic_left)))
 
     # I'm not interested in y_axis, because it represents the height of the camera
     return np.array([[l[0], l[2]] for l in locations])
@@ -235,7 +232,7 @@ def get_pairs_locations(pairs):
 def get_ground_truth_locations(pairs=None):
     if pairs:
         return get_ground_truth_locations_partial(pairs)
-    return get_ground_truth_locations_full()
+    return get_ground_truth_locations_full() 
 
 
 def get_ground_truth_locations_full():
@@ -246,8 +243,8 @@ def get_ground_truth_locations_full():
     with open(GROUND_TRUTH_LOCATIONS_PATH, 'r') as f:
         for line in f:
             extrinsic = np.array([float(n) for n in line.split(' ')])
-            extrinsic = np.reshape(extrinsic, (3, 4))
-            camera_in_camera_coords = np.array([0, 0, 0, 1])
+            extrinsic = np.reshape(extrinsic, (3,4))
+            camera_in_camera_coords = np.array([0,0,0,1])
             locations_ground_truth.append(extrinsic @ camera_in_camera_coords)
 
     return np.array([[l[0], l[2]] for l in locations_ground_truth])
@@ -262,12 +259,12 @@ def get_ground_truth_locations_partial(pairs):
         for line in f:
             if i < pairs[0].PairId:
                 i += 1
-            elif i < pairs[-1].PairId + 1:
+            elif i < pairs[-1].PairId+1:
                 extrinsic = np.array([float(n) for n in line.split(' ')])
-                extrinsic = np.reshape(extrinsic, (3, 4))
-                camera_in_camera_coords = np.array([0, 0, 0, 1])
+                extrinsic = np.reshape(extrinsic, (3,4))
+                camera_in_camera_coords = np.array([0,0,0,1])
                 locations_ground_truth.append(extrinsic @ camera_in_camera_coords)
-
+                
                 i += 1
             else:
                 break
@@ -284,7 +281,7 @@ def get_distance(pair):
     found_location = pair[0]
     expected_location = pair[1]
 
-    return sum(map(lambda v: (v[0] - v[1]) ** 2, zip(found_location, expected_location)))
+    return sum(map(lambda v: (v[0] - v[1])**2, zip(found_location, expected_location)))
 
 
 def hstack(R, t):
@@ -292,15 +289,15 @@ def hstack(R, t):
     len_shape_t = len(t.shape)
 
     if len(t.shape) < len_shape_R:
-        t = np.reshape(t, t.shape + (1,) * (len_shape_R - len_shape_t))
+        t = np.reshape(t, t.shape + (1,)*(len_shape_R - len_shape_t))
     else:
-        R = np.reshape(R, R.shape + (1,) * (len_shape_t - len_shape_R))
+        R = np.reshape(R, R.shape + (1,)*(len_shape_t - len_shape_R))
 
     return np.hstack((R, t))
 
 
-def get_supporters(fours_kps, points_3d, R_left, t_left, intrinsic, extrinsic_left0, extrinsic_right0, img_left0=None,
-                   img_left1=None):
+def get_supporters(fours_kps, points_3d, R_left, t_left, intrinsic, extrinsic_left0, extrinsic_right0, img_left0=None, img_left1=None):
+    
     R_right, t_right = get_Rt_right(R_left, t_left)
 
     # [calib_left0, calib_right0, calib_left1, calib_right1]
@@ -315,11 +312,9 @@ def get_supporters(fours_kps, points_3d, R_left, t_left, intrinsic, extrinsic_le
         inlier = True
         for cam_idx in range(4):
             R, t = extrinsic_matrices[cam_idx]
-            estimated_pixel_location = intrinsic @ (
-                        R @ p_3d + t)  # (extrinsic_matrices[cam_idx] @ np.reshape(np.append(p_3d, 1), (4, 1)))
+            estimated_pixel_location = intrinsic @ (R @ p_3d + t)  # (extrinsic_matrices[cam_idx] @ np.reshape(np.append(p_3d, 1), (4, 1)))
             estimated_pixel_location = estimated_pixel_location[:2] / estimated_pixel_location[2]
-            if np.linalg.norm(
-                    np.array(fours_kps[i][cam_idx]) - np.reshape(estimated_pixel_location, (2,))) >= THRESHOLD:
+            if np.linalg.norm(np.array(fours_kps[i][cam_idx]) - np.reshape(estimated_pixel_location, (2,))) >= THRESHOLD:
                 is_supporter += [False]
                 inlier = False
                 break
@@ -333,16 +328,12 @@ def get_supporters(fours_kps, points_3d, R_left, t_left, intrinsic, extrinsic_le
         for i in range(len(is_supporter)):
             if is_supporter[i]:
                 # print in CYAN
-                img_left0 = cv2.circle(img_left0, (int(fours_kps[i][0][0]), int(fours_kps[i][0][1])), radius=2,
-                                       color=GREEN, thickness=-1)
-                img_left1 = cv2.circle(img_left1, (int(fours_kps[i][2][0]), int(fours_kps[i][2][1])), radius=2,
-                                       color=GREEN, thickness=-1)
+                img_left0 = cv2.circle(img_left0, (int(fours_kps[i][0][0]), int(fours_kps[i][0][1])), radius=2, color=GREEN, thickness=-1)
+                img_left1 = cv2.circle(img_left1, (int(fours_kps[i][2][0]), int(fours_kps[i][2][1])), radius=2, color=GREEN, thickness=-1)
             else:
                 # print in ORANGE
-                img_left0 = cv2.circle(img_left0, (int(fours_kps[i][0][0]), int(fours_kps[i][0][1])), radius=2,
-                                       color=RED, thickness=-1)
-                img_left1 = cv2.circle(img_left1, (int(fours_kps[i][2][0]), int(fours_kps[i][2][1])), radius=2,
-                                       color=RED, thickness=-1)
+                img_left0 = cv2.circle(img_left0, (int(fours_kps[i][0][0]), int(fours_kps[i][0][1])), radius=2, color=RED, thickness=-1)
+                img_left1 = cv2.circle(img_left1, (int(fours_kps[i][2][0]), int(fours_kps[i][2][1])), radius=2, color=RED, thickness=-1)
 
         cv2.imshow("left 0 with inliers and outliers", img_left0)
         cv2.imshow("left 1 with inliers and outliers", img_left1)
@@ -351,7 +342,7 @@ def get_supporters(fours_kps, points_3d, R_left, t_left, intrinsic, extrinsic_le
 
     # print(f"best amount of supporters: {sum(is_supporter)} / {len(is_supporter)}")
 
-    return sum(is_supporter) / len(points_3d.T), is_supporter
+    return sum(is_supporter)/len(points_3d.T), is_supporter
 
 
 def get_Rt_with_ransac(points_3d, kps_cameras, intrinsic, extrinsic_left0, extrinsic_right0):
@@ -386,8 +377,7 @@ def get_Rt_with_ransac(points_3d, kps_cameras, intrinsic, extrinsic_left0, extri
         kps_cameras_sample = np.array([kps_cameras[idx] for idx in index_samples])
 
         # calculate [R|t] using this sample
-        extrinsic_left1 = apply_P3P(points_3d_sample.T, points_2d=np.array([f[2] for f in kps_cameras_sample]).T,
-                                    intrinsic=intrinsic)
+        extrinsic_left1 = apply_P3P(points_3d_sample.T, points_2d=np.array([f[2] for f in kps_cameras_sample]).T, intrinsic=intrinsic)
 
         # estimate the results
         if extrinsic_left1 is None:
@@ -396,8 +386,7 @@ def get_Rt_with_ransac(points_3d, kps_cameras, intrinsic, extrinsic_left0, extri
             supporters_percentage = 0
         else:
             R_left1, t_left1 = extrinsic_left1
-            supporters_percentage, supporters_boolean = get_supporters(kps_cameras, points_3d.T, R_left1, t_left1,
-                                                                       intrinsic, extrinsic_left0, extrinsic_right0)
+            supporters_percentage, supporters_boolean = get_supporters(kps_cameras, points_3d.T, R_left1, t_left1, intrinsic, extrinsic_left0, extrinsic_right0)
 
         if supporters_percentage > best_P3P_supporters_percentage:
             best_P3P_supporters_percentage = supporters_percentage
@@ -442,8 +431,7 @@ def get_Rt_with_ransac(points_3d, kps_cameras, intrinsic, extrinsic_left0, extri
         t_PnP = np.reshape(tvecs, (3,))
 
         # estimate new model
-        PnP_supporters_percentage, PnP_supporters_boolean = get_supporters(kps_cameras, points_3d.T, R_PnP, t_PnP,
-                                                                           intrinsic, extrinsic_left0, extrinsic_right0)
+        PnP_supporters_percentage, PnP_supporters_boolean = get_supporters(kps_cameras, points_3d.T, R_PnP, t_PnP, intrinsic, extrinsic_left0, extrinsic_right0)
         # save best result
         if PnP_supporters_percentage > best_PnP_supporters_percentage:
             best_PnP_supporters_percentage = PnP_supporters_percentage
@@ -474,7 +462,7 @@ def get_Rt_with_ransac(points_3d, kps_cameras, intrinsic, extrinsic_left0, extri
 
 
 def get_amount_of_iterations(prob, sample_size, epsilon):
-    return ceil(log2(1 - prob) / log2(1 - (1 - epsilon) ** sample_size))
+    return ceil(log2(1-prob) / log2(1 - (1 - epsilon)**sample_size))
 
 
 def get_cameras_locations(m1, m2, R_left1, t_left1):
@@ -503,6 +491,7 @@ def get_position_in_world(point, R, t):
 
 
 def get_Rt_right(R_left, t_left):
+
     t_left = np.reshape(t_left, (3,))
     _, _, m2 = part1.read_cameras()
     R_lr, t_lr = get_Rt(m2)
@@ -580,11 +569,10 @@ def get_4matched_kps(matches_left_0_1, matches_pair0, matches_pair1):
     return fours
 
 
+
 def get_longest_track(tracks):
     # find longest track
-    not_standing = list(
-        filter(lambda t: list(t.PairId_MatchIndex.keys())[0] > 2400 or list(t.PairId_MatchIndex.keys())[-1] < 2300,
-               list(tracks.values())))
+    not_standing = list(filter(lambda t: list(t.PairId_MatchIndex.keys())[0] > 2400 or list(t.PairId_MatchIndex.keys())[-1] < 2300, list(tracks.values())))
     long_track = max(not_standing, key=lambda t: len(t.PairId_MatchIndex))
     len_long = len(long_track.PairId_MatchIndex.keys())
     return long_track
@@ -602,8 +590,10 @@ def show_track_in_images(track, database):
         cv2.waitKey(250)
 
 
+
 if __name__ == "__main__":
     main()
+
 
 """
 
