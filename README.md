@@ -12,9 +12,9 @@ In order to use this program, this are the requirements:
 * Pyhon 3.8
 * Opencv-python
 * Gtsam
-* Database with rectified images, and calibration matrices. ground truth poses are required for evaluating the results. I use a dataset of KITTI, can be found [here](https://www.cvlibs.net/datasets/kitti/eval_odometry.php). The database tree is this:
+* Database with rectified images, and calibration matrices. ground truth poses are required for evaluating the results. I use a dataset of KITTI, can be found [here](https://www.cvlibs.net/datasets/kitti/eval_odometry.php). 
 
-
+The database tree is this:
 ###
 
     .
