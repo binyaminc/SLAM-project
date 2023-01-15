@@ -15,13 +15,16 @@ from part2 import Database, Pair, Track, demi_match
 AVG_DIS = 50  # 7.3 average of distance passed in 10 frames
 POSE_UNCERTAINTY = gtsam.noiseModel.Diagonal.Sigmas(np.array([0.001, 0.001, 0.001, 0.1, 0.1, 0.1]))
 DEBUG = True
-SOURCE_DATA = r'results/data 01.pkl'
+SOURCE_DATA = r'results/data 00.pkl'
 
 
 def main():
 
     database_path = SOURCE_DATA 
     database = Database(database_path)
+
+    if (type(database.Pairs) is dict):
+        database.Pairs = list(database.Pairs.values())
     
     part2.show_camera_coords(database.Pairs)
     
@@ -30,7 +33,7 @@ def main():
     database.serialize(file_path=database_path[:-4] + f' - bundled {AVG_DIS}.pkl')
     plt.clf()
     part2.show_camera_coords(database.Pairs)
-    input()
+    plt.savefig(database_path[:-4] + f' - bundled {AVG_DIS}.png')
     
 
 def split_data(full_database, start_idx, end_idx, save_path):
@@ -58,13 +61,9 @@ def solve_bundles(pairs, tracks, sample=None, a_starting_position=None):
     2. solve each bundle 
     3. concatenate bundles and return
     """
-    if type(pairs) is dict:
-        pairs = list(pairs.values())
-
     last_end_x, last_end_y = 0, 0  # position of the end of last bundle
     seperating_idxes = [0]  # the indexes that seperate bundles. Each is the end of previous and start of new bundle
     starting_position = pairs[0].extrinsic_left.copy()  # starting position of new bundle
-    last_extrinsic = pairs[0].extrinsic_left.copy()
     adjed_pairs = []
 
     if a_starting_position is not None:
@@ -75,8 +74,9 @@ def solve_bundles(pairs, tracks, sample=None, a_starting_position=None):
         # finds the position of current pair and distance to end of last bundle
         (curr_x, _, curr_y) = part2.get_position_in_world(np.array([0, 0, 0]), *part2.get_Rt(pairs[i].extrinsic_left))
         dis = math.sqrt((curr_x - last_end_x) ** 2 + (curr_y - last_end_y) ** 2)
-        if a_starting_position is not None:
-            dis = 0 # for debug purposes
+        
+        # if a_starting_position is not None:
+        #     dis = 0 # for debug purposes
 
         if dis > AVG_DIS or i == len(pairs)-1:
    
@@ -84,14 +84,12 @@ def solve_bundles(pairs, tracks, sample=None, a_starting_position=None):
             start_idx = seperating_idxes[-1]
             end_idx = i
             seperating_idxes.append(i)
-            bundle = pairs[start_idx: end_idx + 1]
+            bundle = copy.deepcopy(pairs[start_idx: end_idx + 1])
             print(f'\rbundle from in {start_idx} to {end_idx}  ', end="")
             
             if start_idx == sample:
                 return starting_position
                 #print("starting check")
-            
-            bundle[0].extrinsic_left = last_extrinsic  # the first extrinsic of the bundle should be from the old location, and not from the end of the last adjusted bundle
             
             if DEBUG:
                 plt.clf()
@@ -105,32 +103,33 @@ def solve_bundles(pairs, tracks, sample=None, a_starting_position=None):
                 x, y = locations.T
                 plt.scatter(x, y, c='green', s=np.array([5] * len(x)))
                 
-            # save data of last pair in new bundle
-            last_extrinsic = bundle[-1].extrinsic_left.copy()
-            (last_end_x, _, last_end_y) = part2.get_position_in_world(np.array([0, 0, 0]), *part2.get_Rt(last_extrinsic))
+            adjed_bundle = solve_bundle(bundle, tracks, starting_position)
             
-            # positioning the bundle to start from the starting position
-            positioning_bundle(bundle, starting_position)
-
             if DEBUG: 
-                # plot the new location
+                # plot the bundled pairs (from the old location)
                 locations = part2.get_pairs_locations(bundle)
                 x, y = locations.T
                 plt.scatter(x, y, c='orange', s=np.array([5] * len(x)))
             
-            adjed_bundle, starting_position = solve_bundle(bundle, tracks)
-
+            # positioning the bundle to start from the starting position - end of the last bundle.
+            positioning_bundle(adjed_bundle, starting_position)
+            starting_position = adjed_bundle[-1].extrinsic_left.copy()
+            
             if DEBUG:
-                # plot the bundled location
-                locations = part2.get_pairs_locations(bundle)
+                # plot the bundle, in it's true location
+                locations = part2.get_pairs_locations(adjed_bundle)
                 x, y = locations.T
                 plt.scatter(x, y, c='red', s=np.array([5] * len(x)))
-                plt.legend(['ground truth', 'intial', 'positioned', 'bundled'])
+                plt.legend(['ground truth', 'intial', 'bundled (same location)', 'positioned'])
                 
-                #plt.savefig(f'results/bundles/from_{start_idx}_to_{end_idx}.png')
-                plt.show()
+                plt.savefig(f'results/bundles/from_{start_idx}_to_{end_idx}.png')
+                #plt.show()
 
             adjed_pairs.extend(adjed_bundle)
+
+            # save location of the end of this bundle
+            (last_end_x, _, last_end_y) = part2.get_position_in_world(np.array([0, 0, 0]), *part2.get_Rt(pairs[i].extrinsic_left))
+            
 
     return adjed_pairs
 
@@ -149,7 +148,7 @@ def extrinsic_dis(ext1, ext2):
     return dis
 
 
-def solve_bundle(bundle, tracks):
+def solve_bundle(bundle, tracks, starting_position=None):
     """
     perform bundle adjustment on the bundle. refine locations of cameras and keypoints
 
@@ -172,7 +171,7 @@ def solve_bundle(bundle, tracks):
     # declare the first camera
     camera0 = gtsam.symbol('c', 0)
 
-    # fix beginning position to be the end of last bundle
+    # give prior knowledge on the beginning position of the bundle- to be the end of last bundle
     R, t = part2.get_Rt(bundle[0].extrinsic_left)
     R, t = get_inverted_transformation(R, t)  # inverting the transformation because GTSAM expects transformation from world to camera
     first_pose = gtsam.Pose3(gtsam.Rot3(R), t)  
@@ -180,7 +179,7 @@ def solve_bundle(bundle, tracks):
 
     ## for each pair: add the points3d with factors
     # start with measurement noise model (of detector)
-    stereo_model = gtsam.noiseModel.Diagonal.Sigmas(np.array([1.0, 1.0, 1.0]))  # TODO: check if this is the sigma I want
+    stereo_model = gtsam.noiseModel.Diagonal.Sigmas(np.array([1.0, 1.0, 1.0]))
     
     for (i, pair) in enumerate(bundle):
         camera = gtsam.symbol('c', i)
@@ -226,9 +225,8 @@ def solve_bundle(bundle, tracks):
         t = np.array([pose.x(), pose.y(), pose.z()])
         R, t = get_inverted_transformation(R, t)
         bundle[i].extrinsic_left = part2.hstack(R, t)
-    
-    next_starting_position = bundle[-1].extrinsic_left.copy()
-    return bundle, next_starting_position
+
+    return bundle  #, next_starting_position
 
 
 def positioning_bundle(bundle, starting_position):
