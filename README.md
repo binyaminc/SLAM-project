@@ -30,3 +30,6 @@ The database tree is this:
                     ├───image_0     # the images from the left camera
                     ├───image_1     # the images from the right camera
                     └───calib.txt   # clibration matrices of the cameras
+
+## Future Work
+- Implementing loop closure to improve long-term consistency of the generated map.
