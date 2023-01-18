@@ -1,5 +1,7 @@
 # Overview
-This project operates a SLAM (Simultaneous localization and mapping) system. It uses images from a set of rectified stereo cameras with their clibration matrices, and produces a map of the percieved road.
+This project operates a SLAM system. SLAM stands for Simultaneous Localization and Mapping, and it is a technique used to create a map of an unknown environment while simultaneously determining the location of a robot or a camera in that environment.
+
+The project uses images from a set of rectified stereo cameras with their calibration matrices, and produces a map of the perceived road.
 
 The project consists of 3 components:
 1. Detection and matching of the keypoints in a pair of images, and creation of 3D points using triangulation.
