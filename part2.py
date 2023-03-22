@@ -14,7 +14,7 @@ import pickle
 from tqdm import tqdm
 
 THRESHOLD = 1.5  # 2
-PAIRS = 1100  # 2760
+PAIRS = 4540 # 1100  # 2760
 
 GREEN = (0, 255, 0)
 RED = (0, 0, 255)
@@ -22,8 +22,8 @@ CYAN = (255,255,0)
 ORANGE = (0, 69, 255)
 
 
-GROUND_TRUTH_LOCATIONS_PATH = r'../data/dataset/poses/01.txt'
-SAVE_PATH = r'results/data 01.pkl'
+GROUND_TRUTH_LOCATIONS_PATH = r'../data/dataset/poses/05.txt'
+SAVE_PATH = r'results/data 05.pkl'
 
 
 @dataclass
@@ -187,51 +187,36 @@ def main():
 
 def show_camera_coords(pairs=None, full_groundtruth=False):
     # plot the pairs
-    values_in_good_range = True
     if pairs:
-        locations_0_2 = get_pairs_locations(pairs)
+        locations_0_2 = get_extrinsics_locations([p.extrinsic_left for p in pairs])
         x, y = locations_0_2.T
-        if any((x > 300) | (x < -300) | (y > 450) | (y < -100)):
-            values_in_good_range = False
-
-        plt.scatter(x,y, c='red',s=np.array([5] * len(x)))  #
+        plt.scatter(x,y, c='red',s=np.array([5] * len(x)))
 
     # plot ground truth
     if full_groundtruth:
         locations_ground_truth_0_2 = get_ground_truth_locations()
     else:
-        locations_ground_truth_0_2 = get_ground_truth_locations(pairs)
+        locations_ground_truth_0_2 = get_ground_truth_locations((pairs[0].PairId, pairs[-1].PairId))
 
     x, y = locations_ground_truth_0_2.T
-    plt.scatter(x, y, c='blue', s=np.array([5] * len(x)))
+    plt.scatter(x, y, c='blue', s=np.array([5] * len(x)))  #
 
     plt.legend((['predicted', 'ground truth'] if pairs else ['ground truth']))
-
-    if not values_in_good_range:
-        plt.xlim([-270, 250])
-        plt.ylim([-100, 450])
-
     plt.show()
 
-    # calc numeric distance
-    dis_list = list(map(get_distance, zip(locations_0_2, locations_ground_truth_0_2)))
-    sum_dis = sum(dis_list)
-    print(f"the sum of distance is {sum_dis}")
 
-
-def get_pairs_locations(pairs):
+def get_extrinsics_locations(extrinsics):
     locations = []
-    for i in range(len(pairs)):
-        pair = pairs[i]
-        locations.append(get_position_in_world(np.array([0,0,0]), *get_Rt(pair.extrinsic_left)))
+    for i in range(len(extrinsics)):
+        locations.append(get_position_in_world(np.array([0,0,0]), *get_Rt(extrinsics[i])))
 
     # I'm not interested in y_axis, because it represents the height of the camera
     return np.array([[l[0], l[2]] for l in locations])
 
 
-def get_ground_truth_locations(pairs=None):
-    if pairs:
-        return get_ground_truth_locations_partial(pairs)
+def get_ground_truth_locations(pairs_range=None):
+    if pairs_range:
+        return get_ground_truth_locations_partial(*pairs_range)
     return get_ground_truth_locations_full() 
 
 
@@ -250,16 +235,16 @@ def get_ground_truth_locations_full():
     return np.array([[l[0], l[2]] for l in locations_ground_truth])
 
 
-def get_ground_truth_locations_partial(pairs):
+def get_ground_truth_locations_partial(start_idx, end_idx):
     # find the ground truth that matches the pairs
     locations_ground_truth = []
 
     i = 0
     with open(GROUND_TRUTH_LOCATIONS_PATH, 'r') as f:
         for line in f:
-            if i < pairs[0].PairId:
+            if i < start_idx:  # pairs[0].PairId
                 i += 1
-            elif i < pairs[-1].PairId+1:
+            elif i <= end_idx:  # pairs[-1].PairId
                 extrinsic = np.array([float(n) for n in line.split(' ')])
                 extrinsic = np.reshape(extrinsic, (3,4))
                 camera_in_camera_coords = np.array([0,0,0,1])
@@ -270,6 +255,29 @@ def get_ground_truth_locations_partial(pairs):
                 break
 
     return np.array([[l[0], l[2]] for l in locations_ground_truth])
+
+
+def get_ground_truth_extrinsics_partial(start_idx, end_idx):
+    # find the ground truth that matches the pairs
+    extrinsics = []
+    i = 0
+    with open(GROUND_TRUTH_LOCATIONS_PATH, 'r') as f:
+        for line in f:
+            if i < start_idx:
+                i += 1
+            elif i <= end_idx:
+                # read the extrinsic data from the file
+                extrinsic = np.array([float(n) for n in line.split(' ')])
+                extrinsic = np.reshape(extrinsic, (3,4))
+                # invert the homography, to be [R|t] @ [p_w|1] = [p_c], according to the standard we work with
+                gt_R, gt_t = extrinsic[:, :3], extrinsic[:, 3]
+                gt_R, gt_t = gt_R.T, -gt_R.T @ gt_t
+                extrinsics.append(hstack(gt_R, gt_t))
+                i += 1
+            else:
+                break
+
+    return np.array(extrinsics)
 
 
 def get_distance(pair):

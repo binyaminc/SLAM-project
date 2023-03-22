@@ -4,7 +4,7 @@ import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 import process_pair
 
-DATA_PATH = r'../data/dataset/sequences/01//'
+DATA_PATH = r'../data/dataset/sequences/05//'
 
 FILTER_RATIO = 0.75
 NUM_MATCHES_SHOW = 20
@@ -22,7 +22,7 @@ def main():
     3. get 3d points (triangulation)
     """
     # --------- finding keyPoints with SIFT detector ---------
-    img1,img2 = read_images(0)  # img1 = queryImage, img2 = trainImage
+    img1,img2 = read_images(110)  # img1 = queryImage, img2 = trainImage
     gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
     gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
 

@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 
-DATA_PATH = r'../data/dataset/sequences/01//'
+DATA_PATH = r'../data/dataset/sequences/05//'
 
 FILTER_RATIO = 0.75
 NUM_MATCHES_SHOW = 200
