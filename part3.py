@@ -12,26 +12,35 @@ import part2
 import process_pair
 from part2 import Database, Pair, Track, demi_match
 
-AVG_DIS = 50  # 7.3 average of distance passed in 10 frames
-TRACKS_LEN_FILTER = 1  # minimum length for track to be used in bundle
+BUNDLE_DIS = 50  # 7.3 average of distance passed in 10 frames
 POSE_UNCERTAINTY = gtsam.noiseModel.Diagonal.Sigmas(np.array([0.001, 0.001, 0.001, 0.1, 0.1, 0.1]))
-DEBUG = False
+DEBUG = True
 SOURCE_DATA = r'results/data 05.pkl'
 
 
 def main():
-
-    # TODO: split as they split, and check the performance compared to theirs
+    # loading the data from part2
     database_path = SOURCE_DATA 
     database = Database(database_path)
-
-    if (type(database.Pairs) is dict):
-        database.Pairs = list(database.Pairs.values())
     
-    """
+    # evaluating part2, before bundling
     R_err, t_err = eval_performance([p.extrinsic_left for p in database.Pairs], "excersice 2")
     print(f"after my ex2: R_err = {R_err}, t_err = {t_err}")
+    
+    # performing bundle adjustment
+    database.Pairs = solve_bundles(database.Pairs, database.Tracks)
+    
+    # saving results
+    database.serialize(file_path=database_path[:-4] + f' - bundled {BUNDLE_DIS}.pkl')
+    plt.clf()
+    part2.show_camera_coords(database.Pairs)
+    plt.savefig(database_path[:-4] + f' - bundled {BUNDLE_DIS}.png')
+    
+    # evaluate the results after bundle adjustment
+    R_err, t_err = eval_performance([p.extrinsic_left for p in database.Pairs], "performance R error")
+    print(f"after bundle {BUNDLE_DIS}: R_err = {R_err}, t_err = {t_err}")
 
+    """
     with open('VAN_ex/code/their results.pkl', 'rb') as f:
             pick = pickle.load(f)
             trans_part2, trans_part3 = pick[0], pick[1]
@@ -41,6 +50,7 @@ def main():
     R_err, t_err = eval_performance(trans_part3, "their excersice 3")
     print(f"after their ex3: R_err = {R_err}, t_err = {t_err}")
 
+    print_evaluation(r'results/data 05 - (2) bundled -1 filter 1.pkl')
     print_evaluation(r'results/data 05 - bundled 50 filter 10.pkl')
     print_evaluation(r'results/data 05 - bundled 50 filter 5.pkl')
     print_evaluation(r'results/data 05 - bundled 50 filter 1.pkl')
@@ -48,20 +58,6 @@ def main():
     print_evaluation(r'results/data 05 - bundled 20 filter 5.pkl')
     print_evaluation(r'results/data 05 - bundled 20 filter 1.pkl')
     """
-
-    # part2.show_camera_coords(database.Pairs)
-    
-    database.Pairs = solve_bundles(database.Pairs, database.Tracks)
-    
-    database.serialize(file_path=database_path[:-4] + f' - (2) bundled {AVG_DIS} filter {TRACKS_LEN_FILTER}.pkl')
-    plt.clf()
-    part2.show_camera_coords(database.Pairs)
-    plt.savefig(database_path[:-4] + f' - (2) bundled {AVG_DIS} filter {TRACKS_LEN_FILTER}.png')
-    
-    # evaluate the results
-    R_err, t_err = eval_performance([p.extrinsic_left for p in database.Pairs], "performance R error")
-    print(f"after bundle {AVG_DIS}: R_err = {R_err}, t_err = {t_err}")
-
     
 def print_evaluation(database_path):
     database = Database(database_path)
@@ -113,8 +109,8 @@ def solve_bundles(pairs, tracks, sample=None, a_starting_position=None):
         # if a_starting_position is not None:
         #     dis = 0 # for debug purposes
 
-        if dis > AVG_DIS or i == len(pairs)-1:
-            
+        if dis > BUNDLE_DIS or i == len(pairs)-1:
+
             # start new bundle
             start_idx = seperating_idxes[-1]
             end_idx = i
@@ -129,7 +125,7 @@ def solve_bundles(pairs, tracks, sample=None, a_starting_position=None):
             if DEBUG:
                 plt.clf()
                 # plot ground truth
-                ground_truth = part2.get_ground_truth_locations((bundle[0].PairId, bundle[-1].PairId))  # TODO: do I need to add to the end (+1)?
+                ground_truth = part2.get_ground_truth_locations((bundle[0].PairId, bundle[-1].PairId))
                 x, y = ground_truth.T
                 plt.scatter(x, y, c='blue', s=np.array([5] * len(x)))
             
@@ -138,9 +134,6 @@ def solve_bundles(pairs, tracks, sample=None, a_starting_position=None):
                 x, y = locations.T
                 plt.scatter(x, y, c='green', s=np.array([5] * len(x)))
 
-            # positioning the bundle to start from the starting position - end of the last bundle.
-            # positioning_bundle(bundle, starting_position)  # TODO: for const fixing
-            
             adjed_bundle = solve_bundle(bundle, tracks)
             """
             if DEBUG: 
@@ -217,8 +210,7 @@ def solve_bundle(bundle, tracks):  # , tracks, starting_position=None
     R, t = get_inverted_transformation(R, t)  # inverting the transformation because GTSAM expects transformation from world to camera
     first_pose = gtsam.Pose3(gtsam.Rot3(R), t)  
     graph.add(gtsam.PriorFactorPose3(camera0, first_pose, POSE_UNCERTAINTY))
-    #graph.add(gtsam.NonlinearEqualityPose3(camera0, first_pose))  # TODO: check if it's better - setting the starting position unchanged
-
+    
     ## for each pair: add the points3d with factors
     # start with measurement noise model (of detector)
     stereo_model = gtsam.noiseModel.Diagonal.Sigmas(np.array([1.0, 1.0, 1.0]))
@@ -229,12 +221,11 @@ def solve_bundle(bundle, tracks):  # , tracks, starting_position=None
         # add the factors from projecting points3d to image plane
         # Note: each point3d is identified uniquely by the trackId
         for (matchedIdx, trackId) in pair.matchIndex_TrackId.items():
-            if len(tracks[trackId].PairId_MatchIndex) >= TRACKS_LEN_FILTER:  # only if we speak about long and significant tracks
-                point3d = gtsam.symbol('p', trackId)
-                (x_left, y_left), (x_right, y_right) = pair.kps_l[matchedIdx], pair.kps_r[matchedIdx]
-                
-                point_factor = gtsam.GenericStereoFactor3D(gtsam.StereoPoint2(x_left, x_right, (y_left+y_right)/2), stereo_model, camera, point3d, K)
-                graph.add(point_factor)
+            point3d = gtsam.symbol('p', trackId)
+            (x_left, y_left), (x_right, y_right) = pair.kps_l[matchedIdx], pair.kps_r[matchedIdx]
+            
+            point_factor = gtsam.GenericStereoFactor3D(gtsam.StereoPoint2(x_left, x_right, (y_left+y_right)/2), stereo_model, camera, point3d, K)
+            graph.add(point_factor)
 
     # fill initial estimate with cameras and points3d locations
     
@@ -243,7 +234,6 @@ def solve_bundle(bundle, tracks):  # , tracks, starting_position=None
         R, t = part2.get_Rt(bundle[i].extrinsic_left)
         R, t = get_inverted_transformation(R, t)
         pose = gtsam.Pose3(gtsam.Rot3(R), gtsam.Point3(t))
-        #if not initial_estimate.exists(gtsam.symbol('c', i)):  # TODO: is it redundant?
         initial_estimate.insert(gtsam.symbol('c', i), pose)
 
         # create points3d cloud
@@ -253,12 +243,11 @@ def solve_bundle(bundle, tracks):  # , tracks, starting_position=None
         
         # enter initials to every point that wasn't yet given an intial value
         for (matchIdx, trackId) in bundle[i].matchIndex_TrackId.items():
-            if len(tracks[trackId].PairId_MatchIndex) >= TRACKS_LEN_FILTER:  # only if we speak about long and significant tracks
-                curr_point3d = gtsam.symbol('p', trackId)
-                # add if the beginning of bundle or beginning of track
-                if not initial_estimate.exists(curr_point3d):
-                    # inverted = gtsam.Point3(R @ points3d[matchIdx] + t)
-                    initial_estimate.insert(curr_point3d, points3d[matchIdx])
+            curr_point3d = gtsam.symbol('p', trackId)
+            # add if the beginning of bundle or beginning of track
+            if not initial_estimate.exists(curr_point3d):
+                # inverted = gtsam.Point3(R @ points3d[matchIdx] + t)
+                initial_estimate.insert(curr_point3d, points3d[matchIdx])
     
     # optimize
     optimizer = gtsam.LevenbergMarquardtOptimizer(graph, initial_estimate)
