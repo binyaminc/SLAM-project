@@ -33,4 +33,3 @@ The database tree is this:
 
 ## Future Work
 - Implementing loop closure to improve long-term consistency of the generated map.
-- Implementing good performance measurment
