@@ -12,7 +12,9 @@ import part2
 import process_pair
 from part2 import Database, Pair, Track, demi_match
 
-BUNDLE_DIS = 50  # 7.3 average of distance passed in 10 frames
+MAX_BUNDLE_DIS = 50  # 7.3 average of distance passed in 10 frames
+MAX_BUNDLE_SIZE = 20
+MAX_BUNDLE_ANGLE = 60
 POSE_UNCERTAINTY = gtsam.noiseModel.Diagonal.Sigmas(np.array([0.001, 0.001, 0.001, 0.1, 0.1, 0.1]))
 DEBUG = True
 SOURCE_DATA = r'results/data 05.pkl'
@@ -31,14 +33,14 @@ def main():
     database.Pairs = solve_bundles(database.Pairs, database.Tracks)
     
     # saving results
-    database.serialize(file_path=database_path[:-4] + f' - bundled {BUNDLE_DIS}.pkl')
+    database.serialize(file_path=database_path[:-4] + f' - bundled dis {MAX_BUNDLE_DIS} angle {MAX_BUNDLE_ANGLE}.pkl')
     plt.clf()
     part2.show_camera_coords(database.Pairs)
-    plt.savefig(database_path[:-4] + f' - bundled {BUNDLE_DIS}.png')
+    plt.savefig(database_path[:-4] + f' - bundled dis {MAX_BUNDLE_DIS} angle {MAX_BUNDLE_ANGLE}.png')
     
     # evaluate the results after bundle adjustment
     R_err, t_err = eval_performance([p.extrinsic_left for p in database.Pairs], "performance R error")
-    print(f"after bundle {BUNDLE_DIS}: R_err = {R_err}, t_err = {t_err}")
+    print(f"after bundle {MAX_BUNDLE_DIS}: R_err = {R_err}, t_err = {t_err}")
 
     """
     with open('VAN_ex/code/their results.pkl', 'rb') as f:
@@ -64,7 +66,7 @@ def print_evaluation(database_path):
     title = database_path[: -4]
     R_err, t_err = eval_performance([p.extrinsic_left for p in database.Pairs], title)
     print(f"{title}: R_err = {R_err}, t_err = {t_err}")
-
+    
 
 def split_data(full_database, start_idx, end_idx, save_path):
     """
@@ -84,93 +86,107 @@ def split_data(full_database, start_idx, end_idx, save_path):
             pickle.dump((ext_database.Pairs, ext_database.Tracks, starting_position), f, pickle.HIGHEST_PROTOCOL)
 
 
-def solve_bundles(pairs, tracks, sample=None, a_starting_position=None):
+def solve_bundles(pairs, tracks):
     """
     Solves bundle adjustment. steps:
     1. splits the pairs (frames) into small bundles according to distance
     2. solve each bundle 
     3. concatenate bundles and return
     """
-    last_end_x, last_end_y = 0, 0  # position of the end of last bundle
-    seperating_idxes = [0]  # the indexes that seperate bundles. Each is the end of previous and start of new bundle
     starting_position = pairs[0].extrinsic_left.copy()  # starting position of new bundle
     adjed_pairs = []
 
-    if a_starting_position is not None:
-        starting_position = a_starting_position
+    # seperating_idxes = get_seperating_indeces([p.extrinsic_left for p in pairs])  # the indexes that seperate bundles. Each is the end of previous and start of new bundle
+    seperating_idxes = []
+    with open('seperating_indeces.pkl', 'rb') as f:
+            seperating_idxes = pickle.load(f)
+    seperating_idxes = [0] + (seperating_idxes)
+    
+    start_idx = seperating_idxes[0]
 
-    for i in tqdm(range(len(pairs))):
+    for i in tqdm(seperating_idxes[1:]):
+    
+        # start new bundle
+        end_idx = i
+        bundle = copy.deepcopy(pairs[start_idx: end_idx + 1])
+        print(f'\rbundle from {start_idx} to {end_idx}  ', end="")
         
+        if DEBUG:
+            plt.clf()
+            # plot ground truth
+            ground_truth = part2.get_ground_truth_locations((bundle[0].PairId, bundle[-1].PairId))
+            x, y = ground_truth.T
+            plt.scatter(x, y, c='blue', s=np.array([5] * len(x)))
         
-        # finds the position of current pair and distance to end of last bundle
-        (curr_x, _, curr_y) = part2.get_position_in_world(np.array([0, 0, 0]), *part2.get_Rt(pairs[i].extrinsic_left))
-        dis = math.sqrt((curr_x - last_end_x) ** 2 + (curr_y - last_end_y) ** 2)
+            # plot the old location
+            locations = part2.get_extrinsics_locations([b.extrinsic_left for b in bundle])
+            x, y = locations.T
+            plt.scatter(x, y, c='green', s=np.array([5] * len(x)))
+
+        adjed_bundle, _, _ = solve_bundle(bundle)
         
-        # if a_starting_position is not None:
-        #     dis = 0 # for debug purposes
+        # positioning the bundle to start from the starting position - end of the last bundle.
+        positioning_bundle(adjed_bundle, starting_position)
+        starting_position = adjed_bundle[-1].extrinsic_left.copy()
+        
+        if DEBUG:
+            # plot the bundle, in it's true location
+            locations = part2.get_extrinsics_locations([b.extrinsic_left for b in adjed_bundle])
+            x, y = locations.T
+            plt.scatter(x, y, c='red', s=np.array([5] * len(x)))
+            #plt.legend(['ground truth', 'intial', 'bundled (same location)', 'positioned'])
+            plt.legend(['ground truth', 'intial', 'bundled & positioned'])
 
-        if dis > BUNDLE_DIS or i == len(pairs)-1:
+            plt.savefig(f'results/bundles/from_{start_idx}_to_{end_idx}.png')
+            #plt.show()
 
-            # start new bundle
-            start_idx = seperating_idxes[-1]
-            end_idx = i
-            seperating_idxes.append(i)
-            bundle = copy.deepcopy(pairs[start_idx: end_idx + 1])
-            print(f'\rbundle from in {start_idx} to {end_idx}  ', end="")
-            
-            if start_idx == sample:
-                return starting_position
-                #print("starting check")
-            
-            if DEBUG:
-                plt.clf()
-                # plot ground truth
-                ground_truth = part2.get_ground_truth_locations((bundle[0].PairId, bundle[-1].PairId))
-                x, y = ground_truth.T
-                plt.scatter(x, y, c='blue', s=np.array([5] * len(x)))
-            
-                # plot the old location
-                locations = part2.get_extrinsics_locations([b.extrinsic_left for b in bundle])
-                x, y = locations.T
-                plt.scatter(x, y, c='green', s=np.array([5] * len(x)))
+        adjed_pairs.extend(adjed_bundle[:-1])  # not taking the last pair, because I don't want to insert it twice (last of this, and first of next)
+    
+        start_idx = end_idx  # start of the next bundle is the end of the previous one
 
-            adjed_bundle = solve_bundle(bundle, tracks)
-            """
-            if DEBUG: 
-                # plot the bundled pairs (from the old location)
-                locations = part2.get_pairs_locations(bundle)
-                x, y = locations.T
-                plt.scatter(x, y, c='orange', s=np.array([5] * len(x)))
-            """
-
-            # positioning the bundle to start from the starting position - end of the last bundle.
-            positioning_bundle(adjed_bundle, starting_position)
-            starting_position = adjed_bundle[-1].extrinsic_left.copy()
-            
-            if DEBUG:
-                # plot the bundle, in it's true location
-                locations = part2.get_extrinsics_locations([b.extrinsic_left for b in adjed_bundle])
-                x, y = locations.T
-                plt.scatter(x, y, c='red', s=np.array([5] * len(x)))
-                #plt.legend(['ground truth', 'intial', 'bundled (same location)', 'positioned'])
-                plt.legend(['ground truth', 'intial', 'bundled & positioned'])
-
-                plt.savefig(f'results/bundles/from_{start_idx}_to_{end_idx}.png')
-                #plt.show()
-
-            adjed_pairs.extend(adjed_bundle[:-1])  # not taking the last pair, because I don't want to insert it twice (last of this, and start of next)
-
-            # save location of the end of this bundle
-            (last_end_x, _, last_end_y) = part2.get_position_in_world(np.array([0, 0, 0]), *part2.get_Rt(pairs[i].extrinsic_left))
-            
     adjed_pairs.append(adjed_bundle[-1])
 
     return adjed_pairs
 
 
+def get_seperating_indeces(extrinsics):
+    last_end_x, last_end_y = 0, 0  # position of the end of last bundle
+    last_end_R = extrinsics[0][:, :3]
+    bundle_size = 0
+    
+    seperating_idxes = [0]
+
+    for (i, ext) in enumerate(extrinsics):
+        bundle_size += 1
+
+        # finds the position of current pair and distance to end of last bundle
+        (curr_x, _, curr_y) = part2.get_position_in_world(np.array([0, 0, 0]), *part2.get_Rt(ext))
+        dis = math.sqrt((curr_x - last_end_x) ** 2 + (curr_y - last_end_y) ** 2)
+        
+        # calculate the angle from the beginning of the bundle
+        curr_R, _ = part2.get_Rt(ext)
+        R_change = curr_R @ last_end_R.T  # rotation diff from the angle of the starting pair
+        angles_change_vec, _ = cv2.Rodrigues(R_change)
+        deg = np.rad2deg(angles_change_vec)
+        angles_size = np.linalg.norm(deg) # euclidean size of the changing vector
+        
+        if dis > MAX_BUNDLE_DIS or bundle_size >= MAX_BUNDLE_SIZE or angles_size > MAX_BUNDLE_ANGLE \
+            or i == len(extrinsics)-1:
+
+            # start new bundle
+            seperating_idxes.append(i)
+            
+            # zeroing parameters
+            last_end_x, last_end_y = curr_x, curr_y  # end of previous bundle is the current extrinsic
+            bundle_size = 0
+            last_end_R = curr_R
+            
+    return seperating_idxes
+
+
 def extrinsic_dis(ext1, ext2):
     """
-    function to measure the distance between two extrinsice matrices of cameras
+    function to measure the distance between two extrinsic matrices of cameras
     """
     R1, t1 = part2.get_Rt(ext1)
     R2, t2 = part2.get_Rt(ext2)
@@ -182,7 +198,7 @@ def extrinsic_dis(ext1, ext2):
     return dis
 
 
-def solve_bundle(bundle, tracks):  # , tracks, starting_position=None
+def solve_bundle(bundle):
     """
     perform bundle adjustment on the bundle. refine locations of cameras and keypoints
 
@@ -205,32 +221,15 @@ def solve_bundle(bundle, tracks):  # , tracks, starting_position=None
     # declare the first camera
     camera0 = gtsam.symbol('c', 0)
 
-    # give prior knowledge on the beginning position of the bundle- to be the end of last bundle
+    # give prior knowledge on the beginning position of the bundle (the end of the last bundle)
     R, t = part2.get_Rt(bundle[0].extrinsic_left)
     R, t = get_inverted_transformation(R, t)  # inverting the transformation because GTSAM expects transformation from world to camera
     first_pose = gtsam.Pose3(gtsam.Rot3(R), t)  
-    graph.add(gtsam.PriorFactorPose3(camera0, first_pose, POSE_UNCERTAINTY))
+    graph.add(gtsam.PriorFactorPose3(camera0, first_pose, POSE_UNCERTAINTY))  # TODO: check the other factor
     
-    ## for each pair: add the points3d with factors
-    # start with measurement noise model (of detector)
-    stereo_model = gtsam.noiseModel.Diagonal.Sigmas(np.array([1.0, 1.0, 1.0]))
-    
-    for (i, pair) in enumerate(bundle):
-        camera = gtsam.symbol('c', i)
-
-        # add the factors from projecting points3d to image plane
-        # Note: each point3d is identified uniquely by the trackId
-        for (matchedIdx, trackId) in pair.matchIndex_TrackId.items():
-            point3d = gtsam.symbol('p', trackId)
-            (x_left, y_left), (x_right, y_right) = pair.kps_l[matchedIdx], pair.kps_r[matchedIdx]
-            
-            point_factor = gtsam.GenericStereoFactor3D(gtsam.StereoPoint2(x_left, x_right, (y_left+y_right)/2), stereo_model, camera, point3d, K)
-            graph.add(point_factor)
-
     # fill initial estimate with cameras and points3d locations
-    
     for i in range(len(bundle)):
-        # insert all camera positions
+        # insert position of current camera 
         R, t = part2.get_Rt(bundle[i].extrinsic_left)
         R, t = get_inverted_transformation(R, t)
         pose = gtsam.Pose3(gtsam.Rot3(R), gtsam.Point3(t))
@@ -246,12 +245,35 @@ def solve_bundle(bundle, tracks):  # , tracks, starting_position=None
             curr_point3d = gtsam.symbol('p', trackId)
             # add if the beginning of bundle or beginning of track
             if not initial_estimate.exists(curr_point3d):
-                # inverted = gtsam.Point3(R @ points3d[matchIdx] + t)
                 initial_estimate.insert(curr_point3d, points3d[matchIdx])
+
+    ## for each pair: add the points3d with factors
+    # start with measurement noise model (of detector)
+    stereo_model = gtsam.noiseModel.Diagonal.Sigmas(np.array([1.0, 1.0, 1.0]))
+
+    factor_count = 0
+    for (i, pair) in enumerate(bundle):
+        camera = gtsam.symbol('c', i)
+
+        # add the factors from projecting points3d to image plane
+        # Note: each point3d is identified uniquely by the trackId
+        for (matchedIdx, trackId) in pair.matchIndex_TrackId.items():
+            point3d = gtsam.symbol('p', trackId)
+            (x_left, y_left), (x_right, y_right) = pair.kps_l[matchedIdx], pair.kps_r[matchedIdx]
+            
+            point_factor = gtsam.GenericStereoFactor3D(gtsam.StereoPoint2(x_left, x_right, (y_left+y_right)/2), stereo_model, camera, point3d, K)
+            graph.add(point_factor)
+            
+            factor_count += 1
+            if (point_factor.error(initial_estimate) > 500):
+                print(f"camera {i}, track {trackId}: {point_factor.error(initial_estimate)} error")
+    
     
     # optimize
     optimizer = gtsam.LevenbergMarquardtOptimizer(graph, initial_estimate)
+    # print(f"factors: {factor_count}, error: {round(optimizer.error(), 2)}, ratio: {round(optimizer.error(), 2)/factor_count}")
     result = optimizer.optimize()
+    # print(f'Final Error: {round(optimizer.error(), 2)}')
 
     # get results
     for i in range(len(bundle)):
@@ -261,7 +283,7 @@ def solve_bundle(bundle, tracks):  # , tracks, starting_position=None
         R, t = get_inverted_transformation(R, t)
         bundle[i].extrinsic_left = part2.hstack(R, t)
 
-    return bundle
+    return bundle, result, graph  # the 'result' and 'graph' are for part4
 
 
 def positioning_bundle(bundle, starting_position):

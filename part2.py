@@ -14,7 +14,7 @@ import pickle
 from tqdm import tqdm
 
 THRESHOLD = 1.5  # 2
-PAIRS = 4540 # 1100  # 2760
+PAIRS = 2760
 
 GREEN = (0, 255, 0)
 RED = (0, 0, 255)
@@ -202,6 +202,7 @@ def show_camera_coords(pairs=None, full_groundtruth=False):
     plt.scatter(x, y, c='blue', s=np.array([5] * len(x)))  #
 
     plt.legend((['predicted', 'ground truth'] if pairs else ['ground truth']))
+    plt.savefig(SAVE_PATH[:-4] + '.png')
     plt.show()
 
 
@@ -389,7 +390,7 @@ def get_Rt_with_ransac(points_3d, kps_cameras, intrinsic, extrinsic_left0, extri
 
         # estimate the results
         if extrinsic_left1 is None:
-            # print("camera [R|t] not found")
+            print("camera [R|t] not found")
             i_iteration -= 1  # TODO: check if that's the right thing, I just not trust it as a valid sample
             supporters_percentage = 0
         else:
