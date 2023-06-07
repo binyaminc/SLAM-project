@@ -9,6 +9,7 @@ FILTER_RATIO = 0.75
 NUM_MATCHES_SHOW = 200
 DISTANCE_THREASHOLD = 400  # previously, 100
 HEIGHT_THRESH = 2
+X_DIS_THRESH = 1
 
 
 def get_keypoints_and_matches(img1, img2, rectified=True):
@@ -20,7 +21,7 @@ def get_keypoints_and_matches(img1, img2, rectified=True):
     
     # filter matches by height (takes only matches that differ in less than 2 pixels)
     if rectified:
-        matches = filter_matches_with_height(matches, keypoints_1, keypoints_2)
+        matches = filter_non_parallel(matches, keypoints_1, keypoints_2)
         
     return keypoints_1, keypoints_2, matches
 
@@ -46,13 +47,15 @@ def get_matches(descriptors_1, descriptors_2):
     return matches
 
 
-def filter_matches_with_height(matches, keypoints_1, keypoints_2):
+def filter_non_parallel(matches, keypoints_1, keypoints_2):
     """
-    filter the matches according to the geight of the matched keypoints. 
-    Note: img1 = queryImage, img2 = trainImage
+    filter the matches according to the height of the matched keypoints, and x_left > x_right
+    Note: img1 = queryImage (=left)
+          img2 = trainImage (=right)
     """
     filtered_matches = list(
-        filter(lambda m: abs(keypoints_1[m.queryIdx].pt[1] - keypoints_2[m.trainIdx].pt[1]) <= HEIGHT_THRESH, matches))
+        filter(lambda m: abs(keypoints_1[m.queryIdx].pt[1] - keypoints_2[m.trainIdx].pt[1]) <= HEIGHT_THRESH \
+                         and keypoints_1[m.queryIdx].pt[0] - keypoints_2[m.trainIdx].pt[0] > X_DIS_THRESH, matches))
     
     return filtered_matches
 
@@ -65,11 +68,6 @@ def get_cloud(matched_kps_l, matched_kps_r, k, m1, m2):
 
 
 def main():
-    # img1, img2 = part1.read_images(0)
-    # kps1, kps2, matched_kp1, matched_kp2, points3d = proc(img1, img2)
-
-    # img1, img2 = part1.read_images(1)
-    # kps1, kps2, matched_kp1, matched_kp2, points3d = proc(img1, img2)
     pass
 
 

@@ -21,24 +21,23 @@ def main():
     2. matching the keypoints
     3. get 3d points (triangulation)
     """
+    
     # --------- finding keyPoints with SIFT detector ---------
-    img1,img2 = read_images(110)  # img1 = queryImage, img2 = trainImage
-    gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
-    gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
-
+    img1,img2 = read_images(138)  # img1 = queryImage, img2 = trainImage
+    
     garbage_output = 0
     # keypoints
     keypoints_1, descriptors_1, keypoints_2, descriptors_2 = process_pair.get_keypoints(img1, img2) 
-
-    img_1 = cv2.drawKeypoints(gray1,keypoints_1,garbage_output)
-    img_2 = cv2.drawKeypoints(gray2, keypoints_2, garbage_output)
+    
+    img_1 = cv2.drawKeypoints(img1,keypoints_1,garbage_output)
+    img_2 = cv2.drawKeypoints(img2, keypoints_2, garbage_output)
 
     cv2.imshow('left with keypoints',img_1)
     cv2.imshow('right with keypoints',img_2)
 
     cv2.waitKey(0)
     cv2.destroyAllWindows()
-
+    
     # --------- Matching the keyPoints ---------
 
     # get matches using BFMatcher
@@ -55,7 +54,7 @@ def main():
     # plot histogram of deviations in height(#pixels) of matches
     show_hist_from_matches(matches, keypoints_1, keypoints_2)
 
-    filtered_matches = process_pair.filter_matches_with_height(matches, keypoints_1, keypoints_2)    
+    filtered_matches = process_pair.filter_non_parallel(matches, keypoints_1, keypoints_2)    
     print("amount of matches: ", len(filtered_matches))
     show_hist_from_matches(filtered_matches, keypoints_1, keypoints_2)
 
@@ -86,16 +85,24 @@ def main():
     
     plot_3d_points(points_3d)
     
-    """
-    # ---------- present distance in X_axis of matched keypoints (for fun) ----------
     
-    print("distance in X_axis of matched keypoints")
-    i = 0
-    for kp1, kp2 in zip(matched_kp1, matched_kp2):
-        print(str(i), kp1.pt[0] - kp2.pt[0])
-        i += 1
-    """
+    # ---------- present distance in X_axis of matched keypoints (for fun) ----------
+    for i in range(200):
+        img1,img2 = read_images(i)  # img1 = queryImage, img2 = trainImage
+        
+        keypoints_1, keypoints_2, matches = process_pair.get_keypoints_and_matches(img1, img2)
+        matched_kp1, matched_kp2 = get_matched_kps(matches, keypoints_1, keypoints_2, get_indeces=False)
+        
+        x_dists = []
+        for kp1, kp2 in zip(matched_kp1, matched_kp2):
+            x_dists.append(kp1.pt[0] - kp2.pt[0])
 
+        x_dists = sorted(x_dists)
+        # plt.hist(x_dists, bins=100)
+        # plt.show()
+
+        print(f"pair {i}: distance smaller than 1 pixel: {len(list(filter(lambda x:x<1, x_dists)))} out of {len(x_dists)}")
+        
 
 def my_generalized_triangulatePoints(calib_matrices, kps):
     """
@@ -185,8 +192,8 @@ def kp_to_npArray(kp):
 
 def read_images(idx):
     img_name = '{:06d}.png'.format(idx)
-    img1 = cv2.imread(DATA_PATH+'image_0//'+img_name)
-    img2 = cv2.imread(DATA_PATH+'image_1//'+img_name)
+    img1 = cv2.imread(DATA_PATH+'image_0//' + img_name, 0)  # 0 -> read image as grayscale
+    img2 = cv2.imread(DATA_PATH+'image_1//' + img_name, 0)
     return img1, img2
 
 
