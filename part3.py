@@ -219,7 +219,7 @@ def solve_bundle(bundle):
     K = gtsam.Cal3_S2Stereo(fx=intrinsic[0,0], fy=intrinsic[1,1], s=0.0, u0=intrinsic[0,2], v0=intrinsic[1,2], b=cameras_x_distance)
 
     # declare the first camera
-    camera0 = gtsam.symbol('c', 0)
+    camera0 = gtsam.symbol('c', bundle[0].PairId)
 
     # give prior knowledge on the beginning position of the bundle (the end of the last bundle)
     R, t = part2.get_Rt(bundle[0].extrinsic_left)
@@ -233,7 +233,7 @@ def solve_bundle(bundle):
         R, t = part2.get_Rt(bundle[i].extrinsic_left)
         R, t = get_inverted_transformation(R, t)
         pose = gtsam.Pose3(gtsam.Rot3(R), gtsam.Point3(t))
-        initial_estimate.insert(gtsam.symbol('c', i), pose)
+        initial_estimate.insert(gtsam.symbol('c', bundle[i].PairId), pose)
 
         # create points3d cloud
         extrinsic_left = bundle[i].extrinsic_left
@@ -253,7 +253,7 @@ def solve_bundle(bundle):
 
     factor_count = 0
     for (i, pair) in enumerate(bundle):
-        camera = gtsam.symbol('c', i)
+        camera = gtsam.symbol('c', bundle[i].PairId)
 
         # add the factors from projecting points3d to image plane
         # Note: each point3d is identified uniquely by the trackId
@@ -265,19 +265,20 @@ def solve_bundle(bundle):
             graph.add(point_factor)
             
             factor_count += 1
-            if (point_factor.error(initial_estimate) > 500):
+            if (point_factor.error(initial_estimate) > 5000):
                 print(f"camera {i}, track {trackId}: {point_factor.error(initial_estimate)} error")
+                
     
     
     # optimize
     optimizer = gtsam.LevenbergMarquardtOptimizer(graph, initial_estimate)
-    # print(f"factors: {factor_count}, error: {round(optimizer.error(), 2)}, ratio: {round(optimizer.error(), 2)/factor_count}")
+    #print(f"factors: {factor_count}, error: {round(optimizer.error(), 3)}, ratio: {round(optimizer.error()/factor_count, 3)}")
     result = optimizer.optimize()
-    # print(f'Final Error: {round(optimizer.error(), 2)}')
+    #print(f'Final Error: {round(optimizer.error(), 2)}')
 
     # get results
     for i in range(len(bundle)):
-        pose = result.atPose3(gtsam.symbol('c', i))
+        pose = result.atPose3(gtsam.symbol('c', bundle[i].PairId))
         R = pose.rotation().matrix()
         t = np.array([pose.x(), pose.y(), pose.z()])
         R, t = get_inverted_transformation(R, t)
