@@ -13,7 +13,7 @@ import process_pair
 from part2 import Database, Pair, Track, demi_match
 
 MAX_BUNDLE_DIS = 50  # 7.3 average of distance passed in 10 frames
-MAX_BUNDLE_SIZE = 20
+MAX_BUNDLE_SIZE = 30
 MAX_BUNDLE_ANGLE = 60
 POSE_UNCERTAINTY = gtsam.noiseModel.Diagonal.Sigmas(np.array([0.001, 0.001, 0.001, 0.1, 0.1, 0.1]))
 DEBUG = True
@@ -124,7 +124,7 @@ def solve_bundles(pairs, tracks):
             plt.scatter(x, y, c='green', s=np.array([5] * len(x)))
 
         adjed_bundle, _, _ = solve_bundle(bundle)
-        
+
         # positioning the bundle to start from the starting position - end of the last bundle.
         positioning_bundle(adjed_bundle, starting_position)
         starting_position = adjed_bundle[-1].extrinsic_left.copy()
@@ -147,6 +147,7 @@ def solve_bundles(pairs, tracks):
     adjed_pairs.append(adjed_bundle[-1])
 
     return adjed_pairs
+
 
 
 def get_seperating_indeces(extrinsics):
@@ -267,16 +268,15 @@ def solve_bundle(bundle):
             factor_count += 1
             if (point_factor.error(initial_estimate) > 5000):
                 print(f"camera {i}, track {trackId}: {point_factor.error(initial_estimate)} error")
-                
-    
     
     # optimize
     optimizer = gtsam.LevenbergMarquardtOptimizer(graph, initial_estimate)
-    #print(f"factors: {factor_count}, error: {round(optimizer.error(), 3)}, ratio: {round(optimizer.error()/factor_count, 3)}")
+    # print(f"factors: {factor_count}, error: {round(optimizer.error(), 3)}, ratio: {round(optimizer.error()/factor_count, 3)}")
+    print(f"Error before: {round(optimizer.error(), 3)}, ", end="")
     result = optimizer.optimize()
-    #print(f'Final Error: {round(optimizer.error(), 2)}')
+    print(f'error after: {round(optimizer.error(), 2)}\r')
 
-    # get results
+    # extract poses and invert
     for i in range(len(bundle)):
         pose = result.atPose3(gtsam.symbol('c', bundle[i].PairId))
         R = pose.rotation().matrix()
@@ -284,7 +284,7 @@ def solve_bundle(bundle):
         R, t = get_inverted_transformation(R, t)
         bundle[i].extrinsic_left = part2.hstack(R, t)
 
-    return bundle, result, graph  # the 'result' and 'graph' are for part4
+    return bundle, result, graph
 
 
 def positioning_bundle(bundle, starting_position):
